@@ -1,0 +1,4 @@
+app_name: agent-control-core
+environment: development
+audit_enabled: true
+fail_closed: true

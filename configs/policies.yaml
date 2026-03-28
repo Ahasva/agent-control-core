@@ -1,0 +1,21 @@
+approval_required_if:
+  touches_money: true
+  touches_credentials: true
+  touches_external_comms: true
+  destructive_action: true
+
+deny_if:
+  forbidden_tools:
+    - raw_credit_card_access
+    - password_export
+  forbidden_actions:
+    - transfer_money_without_approval
+    - delete_files_without_approval
+
+risk_overrides:
+  critical_keywords:
+    - credit card
+    - bank transfer
+    - wire money
+    - password
+    - delete all

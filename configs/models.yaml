@@ -1,0 +1,5 @@
+planner_model: gpt-5.4-mini
+risk_model: gpt-5.4-mini
+explanation_model: gpt-5.4-nano
+fallback_model: gpt-5.4
+temperature: 0.1
