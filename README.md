@@ -121,6 +121,24 @@ Scenarios
 	3.	Production configuration replacement + review bypass
 → ❌ denied
 
+Pipeline
+main()
+  └── build_demo_scenarios()
+        └── creates TaskRequest objects
+
+main()
+  └── run_single_scenario(task, settings)
+        ├── mock_generate_plan(task) OR live_generate_plan(task, settings)
+        │     └── returns ExecutionPlan
+        ├── mock_assess_risk(task, plan) OR live_assess_risk(task, plan, settings)
+        │     └── returns RiskAssessment
+        ├── evaluate_plan(task, plan, risk)
+        │     └── returns PolicyDecision
+        └── based on PolicyDecision:
+              - allow
+              - require approval
+              - deny
+
 ---
 
 ⚙️ Configuration

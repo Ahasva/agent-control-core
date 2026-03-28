@@ -1,3 +1,17 @@
+"""
+DECISION LOGIC (FACTS), based on fact-checking helper functions, i.e. answers questions, e.g.:
+    - 	“Does this plan have destructive steps?”
+    -   “Does this task try to skip review?”
+
+Therefore, it serves as fact extraction, by evaluation X as either true or false!
+This is of grave importance for the POLICY LOGIC (ENGINE)
+
+Plan: `plan_touches_external_comms(plan)` & `plan_is_destructive(plan)` inspect the ExecutionPlan
+Task: `task_requests_review_bypass(task)` & `task_targets_production_config(task)` inspect the raw TaskRequest
+
+"""
+
+
 from agent_control_core.schemas.plans import ExecutionPlan
 from agent_control_core.schemas.tasks import TaskRequest
 

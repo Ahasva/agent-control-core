@@ -1,3 +1,11 @@
+"""
+POLICY LOGIC (JUDGEMENT), hence, this module serves as the actual decision maker
+(by calling and combining the helper functions from the rule-set)
+
+The POLICY LOGIC uses the decision from the DECISION LOGIC (FACTS) and decides (JUDGEMENT): 
+"allow" or "require approval" or "deny".
+"""
+
 from agent_control_core.schemas.common import PolicyDecisionType, RiskLevel
 from agent_control_core.schemas.plans import ExecutionPlan
 from agent_control_core.schemas.policies import PolicyDecision, RiskAssessment
@@ -18,6 +26,12 @@ def evaluate_plan(
     plan: ExecutionPlan,
     risk: RiskAssessment,
 ) -> PolicyDecision:
+    """
+    `evaluate_plan()` takes the original task (TasksRequest), 
+    the generated plan (ExecutionPlan) and the risk (RiskAssessment)
+    and it returns PolicyDecision object
+    """
+
     reasons: list[str] = []
     required_approvals: list[str] = []
 
