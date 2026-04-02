@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,3 +21,8 @@ class Settings(BaseSettings):
 
     audit_enabled: bool = True
     fail_closed: bool = True
+
+    serial_enabled: bool = Field(default=False)
+    serial_port: str | None = Field(default=None)
+    serial_baudrate: int = Field(default=115200)
+    serial_timeout: float = Field(default=1.0)

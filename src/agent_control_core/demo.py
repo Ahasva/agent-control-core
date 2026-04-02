@@ -16,6 +16,14 @@ from agent_control_core.schemas.policies import PolicyDecision, RiskAssessment
 from agent_control_core.schemas.tasks import TaskRequest
 from agent_control_core.settings import Settings
 from agent_control_core.workflows.checkpoints import build_approval_request
+from agent_control_core.machine.state_logic import update_potentiometer
+from agent_control_core.schemas.state import MachineMode, SystemState
+from agent_control_core.execution.executor import (
+    MachineExecutor,
+    apply_execution_bundle_to_state,
+    build_execution_bundle,
+)
+from agent_control_core.execution.serial_link import SerialMachineLink
 
 
 def build_demo_scenarios() -> list[TaskRequest]:
@@ -240,6 +248,62 @@ def print_section(title: str, payload: dict) -> None:
     print(json.dumps(payload, indent=2, default=str))
 
 
+def build_demo_state_for_task(task: TaskRequest) -> SystemState:
+    goal = task.goal.lower()
+
+    state = SystemState.initial()
+
+    if "requirement" in goal:
+        state = state.model_copy(
+            update={
+                "machine_mode": MachineMode.READY,
+                "machine_enabled": True,
+                "last_event": "demo_state_ready_for_analysis",
+            }
+        )
+        return update_potentiometer(state, 512)
+
+    if "external supplier" in goal or "send" in goal:
+        state = state.model_copy(
+            update={
+                "machine_mode": MachineMode.READY,
+                "machine_enabled": True,
+                "approval_pending": True,
+                "approval_granted": False,
+                "last_event": "demo_state_requires_approval",
+            }
+        )
+        return update_potentiometer(state, 512)
+
+    if "delete" in goal or "replace" in goal:
+        state = state.model_copy(
+            update={
+                "machine_mode": MachineMode.READY,
+                "machine_enabled": True,
+                "last_event": "demo_state_ready_but_high_risk",
+            }
+        )
+        return update_potentiometer(state, 700)
+
+    return update_potentiometer(state, 512)
+
+
+def maybe_connect_serial_link(settings: Settings) -> SerialMachineLink | None:
+    if not settings.serial_enabled:
+        return None
+
+    if not settings.serial_port:
+        raise ValueError("SERIAL_ENABLED is true, but SERIAL_PORT is not configured.")
+
+    serial_link = SerialMachineLink(
+        port=settings.serial_port,
+        baudrate=settings.serial_baudrate,
+        timeout=settings.serial_timeout,
+    )
+    serial_link.connect()
+    return serial_link
+
+
 def live_generate_plan(task: TaskRequest, settings: Settings) -> ExecutionPlan:
     system_prompt = load_prompt("generate_plan.md")
     user_input = (
@@ -285,6 +349,16 @@ def run_single_scenario(task: TaskRequest, settings: Settings) -> None:
         session_id=task.session_id,
         event_type="task_received",
         action_summary=task.goal,
+    )
+
+    state = build_demo_state_for_task(task)
+    print_section("SYSTEM STATE", state.model_dump())
+
+    emit_audit_event(
+        session_id=task.session_id,
+        event_type="state_initialized",
+        action_summary=f"Machine state initialized: {state.machine_mode.value}",
+        rationale=f"enabled={state.machine_enabled}, approval_pending={state.approval_pending}, requested_angle={state.requested_angle}",
     )
 
     if settings.use_mock_llm:
@@ -336,7 +410,7 @@ def run_single_scenario(task: TaskRequest, settings: Settings) -> None:
         rationale="; ".join(risk.reasons),
     )
 
-    policy_decision: PolicyDecision = evaluate_plan(task, plan, risk)
+    policy_decision: PolicyDecision = evaluate_plan(task, plan, risk, state)
     print_section("POLICY DECISION", policy_decision.model_dump())
 
     emit_audit_event(
@@ -346,6 +420,42 @@ def run_single_scenario(task: TaskRequest, settings: Settings) -> None:
         decision=policy_decision.model_dump(mode="json")["decision"],
         rationale="; ".join(policy_decision.reasons),
     )
+
+    if policy_decision.decision == PolicyDecisionType.ALLOW:
+        execution_bundle = build_execution_bundle(plan, policy_decision, state)
+        print_section("EXECUTION BUNDLE", execution_bundle.model_dump())
+
+        serial_link = None
+        try:
+            serial_link = maybe_connect_serial_link(settings)
+
+            executor = MachineExecutor()
+            state_after_execution = executor.execute_bundle(
+                execution_bundle,
+                state,
+                serial_link=serial_link,
+            )
+            print_section("STATE AFTER EXECUTION", state_after_execution.model_dump())
+
+            emit_audit_event(
+                session_id=task.session_id,
+                event_type="execution_bundle_applied",
+                action_summary="Approved execution bundle applied to machine state.",
+                decision="allow",
+                rationale=f"Executed {len(execution_bundle.actions)} machine action(s).",
+            )
+
+            if serial_link is not None:
+                try:
+                    serial_link.send_command("READ_STATUS")
+                    status_line = serial_link.read_line()
+                    print_section("ARDUINO STATUS", {"status": status_line})
+                except Exception as exc:
+                    print_section("ARDUINO STATUS ERROR", {"error": str(exc)})
+
+        finally:
+            if serial_link is not None:
+                serial_link.close()
 
     if policy_decision.decision == PolicyDecisionType.REQUIRE_APPROVAL:
         approval_request: ApprovalRequest = build_approval_request(
