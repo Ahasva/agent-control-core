@@ -270,3 +270,30 @@ flowchart LR
 
     PD --> AU[AuditEvent]
 ```
+
+## Machine Demo: Guarded Machine Cell
+
+This repository also includes a physical machine demo using an Arduino Uno R4 WiFi.
+
+The demo shows three machine-operation scenarios:
+
+1. **Safe bounded movement**
+   - machine starts in READY
+   - policy allows execution
+   - servo moves to the operator setpoint
+
+2. **Calibration with human approval**
+   - machine requests approval
+   - operator presses Button A
+   - policy is re-evaluated
+   - calibration sequence executes
+
+3. **Unsafe immediate motion request**
+   - request tries to bypass readiness checks
+   - policy denies execution
+   - machine enters FAULT state
+
+This demonstrates the core principle of the project:
+
+> AI can propose actions, but deterministic policy, machine state, and human approval decide what is actually executed.
+

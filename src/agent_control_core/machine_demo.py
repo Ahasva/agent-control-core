@@ -54,8 +54,8 @@ def build_machine_demo_state_for_task(task: TaskRequest) -> SystemState:
     if "safe test movement" in goal:
         state = SystemState.initial().model_copy(
             update={
-                "machine_mode": MachineMode.OFF,
-                "machine_enabled": False,
+                "machine_mode": MachineMode.READY,
+                "machine_enabled": True,
                 "last_event": "machine_demo_safe_test_initial_state",
             }
         )
@@ -64,7 +64,7 @@ def build_machine_demo_state_for_task(task: TaskRequest) -> SystemState:
     if "run calibration" in goal:
         state = SystemState.initial().model_copy(
             update={
-                "machine_mode": MachineMode.IDLE,
+                "machine_mode": MachineMode.READY,
                 "machine_enabled": True,
                 "approval_pending": True,
                 "approval_granted": False,
@@ -121,7 +121,7 @@ def mock_machine_generate_plan(task: TaskRequest) -> ExecutionPlan:
                     touches_money=False,
                     touches_credentials=False,
                     touches_external_comms=False,
-                    destructive_action=True,
+                    destructive_action=False,
                 ),
             ],
         )
@@ -158,7 +158,7 @@ def mock_machine_generate_plan(task: TaskRequest) -> ExecutionPlan:
                     touches_money=False,
                     touches_credentials=False,
                     touches_external_comms=False,
-                    destructive_action=True,
+                    destructive_action=False,
                 ),
             ],
         )
@@ -195,7 +195,7 @@ def mock_machine_assess_risk(task: TaskRequest, plan: ExecutionPlan) -> RiskAsse
 
     if "run calibration" in goal:
         return RiskAssessment(
-            risk_level=RiskLevel.HIGH,
+            risk_level=RiskLevel.MEDIUM,
             reasons=[
                 "Calibration affects physical actuator behavior and should be explicitly controlled.",
                 "Approval is required before execution.",
@@ -257,6 +257,40 @@ def reset_hardware_to_baseline(serial_link) -> str | None:
     serial_link.send_command("DISABLE_MACHINE")
     serial_link.send_command("MOVE_SERVO 90")
     return request_fresh_status(serial_link)
+
+
+def set_hardware_baseline_for_task(task: TaskRequest, serial_link) -> str | None:
+    text = f"{task.goal} {task.context or ''}".lower()
+
+    serial_link.send_command("CLEAR_FAULT")
+    serial_link.send_command("UNLOCK_MACHINE")
+    serial_link.send_command("DISABLE_MACHINE")
+    serial_link.send_command("MOVE_SERVO 90")
+
+    if "safe test movement" in text or "run calibration" in text:
+        serial_link.send_command("ENABLE_MACHINE")
+        serial_link.send_command("SET_STATE READY")
+
+    return request_fresh_status(serial_link)
+
+
+def wait_for_hardware_approval(
+    serial_link,
+    timeout_seconds: float = 30.0,
+) -> tuple[bool, str | None]:
+    import time
+
+    deadline = time.time() + timeout_seconds
+
+    while time.time() < deadline:
+        status_line = request_fresh_status(serial_link)
+        if status_line is not None and "BTN_A=1" in status_line:
+            serial_link.send_command("SET_STATE APPROVAL_GRANTED")
+            confirmed = request_fresh_status(serial_link)
+            return True, confirmed
+        time.sleep(0.25)
+
+    return False, request_fresh_status(serial_link)
 
 
 def merge_hardware_status_into_state(state: SystemState, status_line: str | None) -> SystemState:
@@ -336,7 +370,7 @@ def run_single_machine_scenario(task: TaskRequest, settings: Settings) -> None:
         serial_link = maybe_connect_serial_link(settings)
         if serial_link is not None:
             time.sleep(2.0)
-            baseline_status = reset_hardware_to_baseline(serial_link)
+            baseline_status = set_hardware_baseline_for_task(task, serial_link)
             print_section("ARDUINO BASELINE RESET", {"status": baseline_status})
 
             status_line = request_fresh_status(serial_link)
@@ -427,6 +461,50 @@ def run_single_machine_scenario(task: TaskRequest, settings: Settings) -> None:
                 decision="require_approval",
                 rationale=approval_request.user_message,
             )
+
+            if serial_link is not None:
+                approved, approval_status = wait_for_hardware_approval(serial_link)
+                print_section("APPROVAL RESULT", {"approved": approved, "status": approval_status})
+
+                if approved:
+                    state = merge_hardware_status_into_state(state, approval_status)
+                    print_section("SYSTEM STATE AFTER APPROVAL", state.model_dump())
+
+                    policy_decision_after_approval: PolicyDecision = evaluate_plan(task, plan, risk, state)
+                    print_section("POLICY DECISION AFTER APPROVAL", policy_decision_after_approval.model_dump())
+
+                    emit_audit_event(
+                        session_id=task.session_id,
+                        event_type="policy_re_evaluated",
+                        action_summary="Policy decision re-evaluated after hardware approval.",
+                        decision=policy_decision_after_approval.model_dump(mode="json")["decision"],
+                        rationale="; ".join(policy_decision_after_approval.reasons),
+                    )
+
+                    if policy_decision_after_approval.decision == PolicyDecisionType.ALLOW:
+                        execution_bundle = build_machine_execution_bundle(
+                            task,
+                            plan,
+                            policy_decision_after_approval,
+                            state,
+                        )
+                        print_section("EXECUTION BUNDLE", execution_bundle.model_dump())
+
+                        executor = MachineExecutor()
+                        state_after_execution = executor.execute_bundle(
+                            execution_bundle,
+                            state,
+                            serial_link=serial_link,
+                        )
+                        print_section("STATE AFTER EXECUTION", state_after_execution.model_dump())
+
+                        emit_audit_event(
+                            session_id=task.session_id,
+                            event_type="execution_bundle_applied",
+                            action_summary="Approved machine execution bundle applied after hardware approval.",
+                            decision="allow",
+                            rationale=f"Executed {len(execution_bundle.actions)} machine action(s).",
+                        )
 
         else:
             if serial_link is not None:

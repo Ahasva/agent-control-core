@@ -297,6 +297,15 @@ void loop() {
     lastBtnBStable = btnB;
     if (btnB == LOW) {
       beepShort(80);
+
+      if (faultActive) {
+        handleClearFault();
+      }
+
+      if (lockActive) {
+        handleUnlockMachine();
+      }
+
       Serial.println("EVENT BUTTON_B_PRESSED");
     }
   }
