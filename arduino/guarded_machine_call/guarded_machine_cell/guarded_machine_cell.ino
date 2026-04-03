@@ -298,15 +298,16 @@ void loop() {
     if (btnB == LOW) {
       beepShort(80);
 
-      if (faultActive) {
-        handleClearFault();
-      }
-
-      if (lockActive) {
-        handleUnlockMachine();
-      }
+      faultActive = false;
+      lockActive = false;
+      machineEnabled = false;
+      machineState = "OFF";
+      servoAngle = 90;
+      machineServo.write(servoAngle);
+      updateStateIndicators();
 
       Serial.println("EVENT BUTTON_B_PRESSED");
+      sendAck("LOCAL_RESET");
     }
   }
 }
