@@ -96,3 +96,8 @@ pip-wheel-metadata/
 # =========================
 configs/local.yaml
 configs/*.local.yaml
+
+# =========================
+# Miscelaneous
+# =========================
+.VSCodeCounter

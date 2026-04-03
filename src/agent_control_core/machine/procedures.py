@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import re
-
 from agent_control_core.machine.state_logic import apply_action_to_state
-from agent_control_core.machine.intent_parser import clamp_angle
+from agent_control_core.machine.intent_parser import parse_machine_intent
 from agent_control_core.schemas.actions import ExecutionBundle, MachineAction, MachineActionType
 from agent_control_core.schemas.common import PolicyDecisionType
 from agent_control_core.schemas.plans import ExecutionPlan
@@ -72,27 +70,8 @@ def build_machine_execution_bundle(
         or "default servo" in text
         or "home servo" in text
     ):
-        target_angle: int | None = None
-
-        absolute_match = re.search(r"move\s+servo\s+to\s+(-?\d+)", text)
-        if absolute_match:
-            target_angle = clamp_angle(int(absolute_match.group(1)))
-
-        delta_match = re.search(r"move\s+servo\s+by\s+([+-]?\d+)", text)
-        if delta_match:
-            target_angle = clamp_angle(working_state.servo_angle + int(delta_match.group(1)))
-
-        if any(
-            phrase in text
-            for phrase in [
-                "center the servo",
-                "centre the servo",
-                "reset servo",
-                "default servo",
-                "home servo",
-            ]
-        ):
-            target_angle = 90
+        parsed = parse_machine_intent(text, current_angle=working_state.servo_angle)
+        target_angle = parsed.safe_target_angle if parsed is not None else None
 
         if target_angle is not None:
             ensure_machine_ready_for_motion()

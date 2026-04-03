@@ -94,3 +94,18 @@ def requested_angle_from_state_is_safe(state: SystemState) -> bool:
     if state.requested_angle is None:
         return True
     return requested_angle_is_safe(state.requested_angle)
+
+def task_requests_safety_bypass(task: TaskRequest) -> bool:
+    text = f"{task.goal} {task.context or ''}".lower()
+    signals = [
+        "ignore the limit",
+        "ignore limits",
+        "ignore safety",
+        "skip safety",
+        "bypass safety",
+        "do what i say",
+        "move anyway",
+        "just do it",
+        "no matter what",
+    ]
+    return any(signal in text for signal in signals)

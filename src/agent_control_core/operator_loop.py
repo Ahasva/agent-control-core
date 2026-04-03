@@ -18,17 +18,14 @@ from agent_control_core.machine_demo import (
     mock_machine_generate_plan,
     request_fresh_status,
 )
+from agent_control_core.machine.intent_parser import clamp_angle, parse_machine_intent
 from agent_control_core.policies.engine import evaluate_plan
-from agent_control_core.schemas.common import PolicyDecisionType
+from agent_control_core.settings import Settings
+from agent_control_core.schemas.common import PolicyDecisionType, RiskLevel
+from agent_control_core.schemas.plans import ExecutionPlan, PlanStep
 from agent_control_core.schemas.policies import PolicyDecision, RiskAssessment
 from agent_control_core.schemas.state import SystemState
 from agent_control_core.schemas.tasks import TaskRequest
-from agent_control_core.settings import Settings
-
-from agent_control_core.machine.intent_parser import clamp_angle, parse_machine_intent
-from agent_control_core.schemas.plans import ExecutionPlan, PlanStep
-from agent_control_core.schemas.policies import RiskAssessment
-from agent_control_core.schemas.common import RiskLevel
 
 
 def build_interactive_task(user_text: str) -> TaskRequest:
@@ -52,14 +49,13 @@ def read_live_state(serial_link) -> SystemState:
 
 
 def build_direct_motion_plan(user_text: str, state: SystemState) -> ExecutionPlan | None:
-    parsed = parse_machine_intent(user_text)
-    if parsed is None:
+    parsed = parse_machine_intent(user_text, current_angle=state.servo_angle)
+    if parsed is None or parsed.safe_target_angle is None:
         return None
 
-    if parsed.intent_type == "move_absolute" and parsed.target_angle is not None:
-        safe_target = clamp_angle(parsed.target_angle)
+    if parsed.intent_type == "move_absolute":
         return ExecutionPlan(
-            summary=f"Move servo to safely bounded target angle {safe_target}.",
+            summary=f"Move servo to safely bounded target angle {parsed.safe_target_angle}.",
             steps=[
                 PlanStep(
                     step_id="step-1",
@@ -73,7 +69,7 @@ def build_direct_motion_plan(user_text: str, state: SystemState) -> ExecutionPla
                 ),
                 PlanStep(
                     step_id="step-2",
-                    description=f"Move servo to bounded target angle {safe_target}.",
+                    description=f"Move servo to bounded target angle {parsed.safe_target_angle}.",
                     tool_name="machine_controller",
                     requires_network=False,
                     touches_money=False,
@@ -84,11 +80,12 @@ def build_direct_motion_plan(user_text: str, state: SystemState) -> ExecutionPla
             ],
         )
 
-    if parsed.intent_type == "move_relative" and parsed.delta_angle is not None:
-        current_angle = state.servo_angle
-        safe_target = clamp_angle(current_angle + parsed.delta_angle)
+    if parsed.intent_type == "move_relative":
         return ExecutionPlan(
-            summary=f"Move servo from current angle {current_angle} by requested delta {parsed.delta_angle}, resulting in bounded target angle {safe_target}.",
+            summary=(
+                f"Move servo from current angle {state.servo_angle} by requested delta {parsed.delta_angle}, "
+                f"resulting in bounded target angle {parsed.safe_target_angle}."
+            ),
             steps=[
                 PlanStep(
                     step_id="step-1",
@@ -102,7 +99,10 @@ def build_direct_motion_plan(user_text: str, state: SystemState) -> ExecutionPla
                 ),
                 PlanStep(
                     step_id="step-2",
-                    description=f"Move servo by requested delta {parsed.delta_angle}, clamped to safe target angle {safe_target}.",
+                    description=(
+                        f"Move servo by requested delta {parsed.delta_angle}, "
+                        f"clamped to safe target angle {parsed.safe_target_angle}."
+                    ),
                     tool_name="machine_controller",
                     requires_network=False,
                     touches_money=False,
@@ -117,17 +117,34 @@ def build_direct_motion_plan(user_text: str, state: SystemState) -> ExecutionPla
 
 
 def build_direct_motion_risk(user_text: str, state: SystemState) -> RiskAssessment | None:
-    parsed = parse_machine_intent(user_text)
+    parsed = parse_machine_intent(user_text, current_angle=state.servo_angle)
     if parsed is None:
         return None
 
+    reasons = ["The request affects physical actuator motion."]
+    sensitive_capabilities = ["servo motion", "state-aware bounded actuation"]
+    risk_level = RiskLevel.MEDIUM
+
+    if parsed.exceeded_limits:
+        reasons.append(
+            f"The original requested target {parsed.raw_target_angle} exceeded the safe servo range and was corrected to {parsed.safe_target_angle}."
+        )
+        sensitive_capabilities.append("boundary correction")
+        risk_level = RiskLevel.HIGH
+    else:
+        reasons.append(
+            f"The requested motion is bounded to the safe servo range of 20 to 160 degrees."
+        )
+
+    if parsed.bypass_signal:
+        reasons.append("The task text includes pressure or bypass language intended to override limits.")
+        sensitive_capabilities.append("safety bypass attempt")
+        risk_level = RiskLevel.CRITICAL
+
     return RiskAssessment(
-        risk_level=RiskLevel.MEDIUM,
-        reasons=[
-            "The request affects physical actuator motion.",
-            "The requested motion is bounded to the safe servo range of 20 to 160 degrees.",
-        ],
-        sensitive_capabilities=["servo motion", "state-aware bounded actuation"],
+        risk_level=risk_level,
+        reasons=reasons,
+        sensitive_capabilities=sensitive_capabilities,
     )
 
 

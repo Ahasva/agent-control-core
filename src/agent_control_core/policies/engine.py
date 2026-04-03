@@ -19,6 +19,7 @@ from agent_control_core.policies.rules import (
     task_is_critical_by_intent,
     task_requests_immediate_motion,
     task_requests_review_bypass,
+    task_requests_safety_bypass,
     task_targets_production_config,
 )
 from agent_control_core.schemas.common import PolicyDecisionType, RiskLevel
@@ -98,6 +99,15 @@ def evaluate_plan(
         return PolicyDecision(
             decision=PolicyDecisionType.DENY,
             reasons=["Critical-risk credential-sensitive actions are denied by default."],
+            required_approvals=[],
+        )
+    
+    if task_requests_safety_bypass(task):
+        return PolicyDecision(
+            decision=PolicyDecisionType.DENY,
+            reasons=[
+                "Task text explicitly attempts to override or bypass safety constraints."
+            ],
             required_approvals=[],
         )
 
