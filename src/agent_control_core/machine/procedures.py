@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from agent_control_core.machine.state_logic import apply_action_to_state
 from agent_control_core.machine.intent_parser import parse_machine_intent
+from agent_control_core.machine.state_logic import apply_action_to_state
 from agent_control_core.schemas.actions import ExecutionBundle, MachineAction, MachineActionType
 from agent_control_core.schemas.common import PolicyDecisionType
 from agent_control_core.schemas.plans import ExecutionPlan
@@ -25,10 +25,23 @@ def build_machine_execution_bundle(
 
     def append_action(action: MachineAction) -> None:
         nonlocal working_state
-        print("DEBUG BEFORE ACTION:", working_state.machine_mode, working_state.machine_enabled, working_state.fault_active, working_state.lock_active, action)
+        print(
+            "DEBUG BEFORE ACTION:",
+            working_state.machine_mode,
+            working_state.machine_enabled,
+            working_state.fault_active,
+            working_state.lock_active,
+            action,
+        )
         actions.append(action)
         working_state = apply_action_to_state(working_state, action)
-        print("DEBUG AFTER ACTION:", working_state.machine_mode, working_state.machine_enabled, working_state.fault_active, working_state.lock_active)
+        print(
+            "DEBUG AFTER ACTION:",
+            working_state.machine_mode,
+            working_state.machine_enabled,
+            working_state.fault_active,
+            working_state.lock_active,
+        )
 
     def ensure_machine_ready_for_motion() -> None:
         nonlocal working_state
@@ -60,7 +73,100 @@ def build_machine_execution_bundle(
                 )
             )
 
-    # 1) Direct servo commands from natural language
+    parsed = parse_machine_intent(text, current_angle=working_state.servo_angle)
+
+    # -------------------------------------------------------------------------
+    # 1) MACHINE CONTROL COMMANDS
+    # -------------------------------------------------------------------------
+    if parsed is not None:
+        if parsed.intent_type == "enable_machine":
+            if not working_state.machine_enabled:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.ENABLE_MACHINE,
+                        target_value=None,
+                        reason="Operator requested machine enable.",
+                    )
+                )
+            return ExecutionBundle(actions=actions)
+
+        if parsed.intent_type == "disable_machine":
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.DISABLE_MACHINE,
+                    target_value=None,
+                    reason="Operator requested machine shutdown.",
+                )
+            )
+            return ExecutionBundle(actions=actions)
+
+        if parsed.intent_type == "set_ready":
+            ensure_machine_ready_for_motion()
+            return ExecutionBundle(actions=actions)
+
+        if parsed.intent_type == "start_active":
+            ensure_machine_ready_for_motion()
+
+            if working_state.machine_mode != MachineMode.ACTIVE:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.START_ACTIVE,
+                        target_value=None,
+                        reason="Operator requested active mode.",
+                    )
+                )
+            return ExecutionBundle(actions=actions)
+
+        if parsed.intent_type == "set_idle":
+            if working_state.machine_mode != MachineMode.IDLE:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.SET_IDLE,
+                        target_value=None,
+                        reason="Operator requested idle state.",
+                    )
+                )
+            return ExecutionBundle(actions=actions)
+
+        if parsed.intent_type == "test_sequence":
+            ensure_machine_ready_for_motion()
+
+            if working_state.machine_mode != MachineMode.ACTIVE:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.START_ACTIVE,
+                        target_value=None,
+                        reason="Start safe test sequence.",
+                    )
+                )
+
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.MOVE_SERVO,
+                    target_value=60,
+                    reason="Test position 1.",
+                )
+            )
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.MOVE_SERVO,
+                    target_value=120,
+                    reason="Test position 2.",
+                )
+            )
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.MOVE_SERVO,
+                    target_value=90,
+                    reason="Return to neutral position.",
+                )
+            )
+
+            return ExecutionBundle(actions=actions)
+
+    # -------------------------------------------------------------------------
+    # 2) DIRECT SERVO COMMANDS
+    # -------------------------------------------------------------------------
     if (
         "move servo to" in text
         or "move servo by" in text
@@ -70,7 +176,6 @@ def build_machine_execution_bundle(
         or "default servo" in text
         or "home servo" in text
     ):
-        parsed = parse_machine_intent(text, current_angle=working_state.servo_angle)
         target_angle = parsed.safe_target_angle if parsed is not None else None
 
         if target_angle is not None:
@@ -84,6 +189,7 @@ def build_machine_execution_bundle(
                         reason="Start bounded active motion procedure.",
                     )
                 )
+
             append_action(
                 MachineAction(
                     action_type=MachineActionType.MOVE_SERVO,
@@ -94,7 +200,9 @@ def build_machine_execution_bundle(
 
             return ExecutionBundle(actions=actions)
 
-    # 2) Calibration procedure
+    # -------------------------------------------------------------------------
+    # 3) CALIBRATION PROCEDURE
+    # -------------------------------------------------------------------------
     if "calibration" in text:
         ensure_machine_ready_for_motion()
 
@@ -133,9 +241,12 @@ def build_machine_execution_bundle(
                 reason="Return machine to READY after calibration.",
             )
         )
+
         return ExecutionBundle(actions=actions)
 
-    # 3) Generic movement scenarios
+    # -------------------------------------------------------------------------
+    # 4) GENERIC MOVEMENT SCENARIOS
+    # -------------------------------------------------------------------------
     movement_relevant = (
         "test movement" in text
         or "safe test" in text
@@ -147,13 +258,15 @@ def build_machine_execution_bundle(
     if movement_relevant and working_state.requested_angle is not None:
         ensure_machine_ready_for_motion()
 
-        append_action(
-            MachineAction(
-                action_type=MachineActionType.START_ACTIVE,
-                target_value=None,
-                reason="Start bounded active test procedure.",
+        if working_state.machine_mode != MachineMode.ACTIVE:
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.START_ACTIVE,
+                    target_value=None,
+                    reason="Start bounded active test procedure.",
+                )
             )
-        )
+
         append_action(
             MachineAction(
                 action_type=MachineActionType.MOVE_SERVO,

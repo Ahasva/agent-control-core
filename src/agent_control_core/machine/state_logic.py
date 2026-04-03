@@ -62,11 +62,18 @@ def apply_action_to_state(state: SystemState, action: MachineAction) -> SystemSt
     action_type = action.action_type
 
     if action_type == MachineActionType.ENABLE_MACHINE:
-        require_transition(state.machine_mode, MachineMode.IDLE)
+        if state.machine_mode == MachineMode.OFF:
+            require_transition(state.machine_mode, MachineMode.IDLE)
+            next_mode = MachineMode.IDLE
+        elif state.machine_mode == MachineMode.IDLE:
+            next_mode = MachineMode.IDLE
+        else:
+            raise ValueError(f"ENABLE_MACHINE not allowed in current state: {state.machine_mode.value}")
+
         return state.model_copy(
             update={
                 "machine_enabled": True,
-                "machine_mode": MachineMode.IDLE,
+                "machine_mode": next_mode,
                 "last_event": "machine_enabled",
             }
         )

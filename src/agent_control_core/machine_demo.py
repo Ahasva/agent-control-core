@@ -303,35 +303,13 @@ def merge_hardware_status_into_state(state: SystemState, status_line: str | None
     if "POT" in parsed:
         updated = update_potentiometer(updated, int(parsed["POT"]))
 
+    enabled = updated.machine_enabled
     if parsed.get("ENABLED") == "1":
+        enabled = True
         updated = updated.model_copy(update={"machine_enabled": True})
     elif parsed.get("ENABLED") == "0":
+        enabled = False
         updated = updated.model_copy(update={"machine_enabled": False})
-
-    if "STATE" in parsed:
-        state_name = parsed["STATE"].lower()
-        valid_modes = {mode.value for mode in MachineMode}
-
-        if state_name in valid_modes:
-            updated = updated.model_copy(update={"machine_mode": MachineMode(state_name)})
-
-        elif state_name == "approval_pending":
-            updated = updated.model_copy(
-                update={
-                    "approval_pending": True,
-                    "approval_granted": False,
-                    "last_event": "hardware_state_approval_pending",
-                }
-            )
-
-        elif state_name == "approval_granted":
-            updated = updated.model_copy(
-                update={
-                    "approval_pending": False,
-                    "approval_granted": True,
-                    "last_event": "hardware_state_approval_granted",
-                }
-            )
 
     if "FAULT" in parsed:
         updated = updated.model_copy(update={"fault_active": parsed["FAULT"] == "1"})
@@ -341,6 +319,35 @@ def merge_hardware_status_into_state(state: SystemState, status_line: str | None
 
     if "SERVO" in parsed:
         updated = updated.model_copy(update={"servo_angle": int(parsed["SERVO"])})
+
+    if "STATE" in parsed:
+        state_name = parsed["STATE"].lower()
+        valid_modes = {mode.value for mode in MachineMode}
+
+        if state_name in valid_modes:
+            updated = updated.model_copy(update={"machine_mode": MachineMode(state_name)})
+
+        elif state_name == "approval_pending":
+            inferred_mode = MachineMode.READY if enabled else MachineMode.OFF
+            updated = updated.model_copy(
+                update={
+                    "machine_mode": inferred_mode,
+                    "approval_pending": True,
+                    "approval_granted": False,
+                    "last_event": "hardware_state_approval_pending",
+                }
+            )
+
+        elif state_name == "approval_granted":
+            inferred_mode = MachineMode.READY if enabled else MachineMode.OFF
+            updated = updated.model_copy(
+                update={
+                    "machine_mode": inferred_mode,
+                    "approval_pending": False,
+                    "approval_granted": True,
+                    "last_event": "hardware_state_approval_granted",
+                }
+            )
 
     if parsed.get("BTN_A") == "1":
         updated = updated.model_copy(

@@ -34,12 +34,12 @@ void setAllStateLeds(bool blue, bool green, bool yellow, bool red) {
 }
 
 void updateStateIndicators() {
-  if (faultActive) {
+  if (faultActive || machineState == "FAULT") {
     setAllStateLeds(false, false, false, true);
     return;
   }
 
-  if (lockActive) {
+  if (lockActive || machineState == "LOCKED") {
     setAllStateLeds(false, false, true, true);
     return;
   }
@@ -59,6 +59,16 @@ void updateStateIndicators() {
     return;
   }
 
+  if (machineState == "APPROVAL_PENDING") {
+    setAllStateLeds(true, false, true, false);
+    return;
+  }
+
+  if (machineState == "APPROVAL_GRANTED") {
+    setAllStateLeds(true, true, true, false);
+    return;
+  }
+
   if (machineState == "CALIBRATION") {
     setAllStateLeds(true, false, true, false);
     return;
@@ -69,15 +79,7 @@ void updateStateIndicators() {
     return;
   }
 
-  if (machineState == "FAULT") {
-    setAllStateLeds(false, false, false, true);
-    return;
-  }
-
-  if (machineState == "LOCKED") {
-    setAllStateLeds(false, false, true, true);
-    return;
-  }
+  setAllStateLeds(false, false, false, false);
 }
 
 void beepShort(int durationMs = 80) {
@@ -135,12 +137,18 @@ void handleDisableMachine() {
   machineState = "OFF";
   faultActive = false;
   lockActive = false;
+  servoAngle = 90;
+  machineServo.write(servoAngle);
   updateStateIndicators();
   sendAck("DISABLE_MACHINE");
 }
 
 void handleSetState(const String& stateName) {
   machineState = stateName;
+
+  // Clear latched flags first unless the new state explicitly sets them
+  faultActive = false;
+  lockActive = false;
 
   if (stateName == "FAULT") {
     faultActive = true;

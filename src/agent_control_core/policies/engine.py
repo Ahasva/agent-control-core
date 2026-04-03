@@ -2,7 +2,7 @@
 POLICY LOGIC (JUDGEMENT), hence, this module serves as the actual decision maker
 (by calling and combining the helper functions from the rule-set)
 
-The POLICY LOGIC uses the decision from the DECISION LOGIC (FACTS) and decides (JUDGEMENT): 
+The POLICY LOGIC uses the decision from the DECISION LOGIC (FACTS) and decides (JUDGEMENT):
 "allow" or "require approval" or "deny".
 """
 
@@ -36,9 +36,10 @@ def evaluate_plan(
     state: SystemState,
 ) -> PolicyDecision:
     """
-    `evaluate_plan()` takes the original task (TasksRequest), 
-    the generated plan (ExecutionPlan) and the risk (RiskAssessment)
-    and it returns PolicyDecision object
+    `evaluate_plan()` takes the original task (TaskRequest),
+    the generated plan (ExecutionPlan), the risk (RiskAssessment),
+    and the current system state (SystemState),
+    and returns a PolicyDecision object.
     """
     reasons: list[str] = []
     required_approvals: list[str] = []
@@ -48,7 +49,10 @@ def evaluate_plan(
     touches_external_comms = plan_touches_external_comms(plan)
     is_destructive = plan_is_destructive(plan)
 
-    # Hard deny based on raw task intent first
+    # -------------------------------------------------------------------------
+    # HARD DENY RULES
+    # -------------------------------------------------------------------------
+
     if task_is_critical_by_intent(task):
         return PolicyDecision(
             decision=PolicyDecisionType.DENY,
@@ -58,50 +62,6 @@ def evaluate_plan(
             required_approvals=[],
         )
 
-    # Hard deny based on machine state
-    if state_is_faulted(state):
-        return PolicyDecision(
-            decision=PolicyDecisionType.DENY,
-            reasons=["Machine is in fault state and cannot execute requested actions."],
-            required_approvals=[],
-        )
-
-    if state_is_locked(state):
-        return PolicyDecision(
-            decision=PolicyDecisionType.DENY,
-            reasons=["Machine is locked and requires reset or acknowledgement before proceeding."],
-            required_approvals=[],
-        )
-
-    if not requested_angle_from_state_is_safe(state):
-        return PolicyDecision(
-            decision=PolicyDecisionType.DENY,
-            reasons=["Requested angle from machine state is outside the allowed safe range."],
-            required_approvals=[],
-        )
-
-    if task_requests_immediate_motion(task) and not state_is_ready(state):
-        return PolicyDecision(
-            decision=PolicyDecisionType.DENY,
-            reasons=["Immediate motion was requested while the machine is not in READY state."],
-            required_approvals=[],
-        )
-
-    # Hard deny rules from plan + risk
-    if risk.risk_level == RiskLevel.CRITICAL and is_destructive:
-        return PolicyDecision(
-            decision=PolicyDecisionType.DENY,
-            reasons=["Critical-risk destructive actions are denied by default."],
-            required_approvals=[],
-        )
-
-    if risk.risk_level == RiskLevel.CRITICAL and touches_credentials:
-        return PolicyDecision(
-            decision=PolicyDecisionType.DENY,
-            reasons=["Critical-risk credential-sensitive actions are denied by default."],
-            required_approvals=[],
-        )
-    
     if task_requests_safety_bypass(task):
         return PolicyDecision(
             decision=PolicyDecisionType.DENY,
@@ -111,7 +71,55 @@ def evaluate_plan(
             required_approvals=[],
         )
 
-    # Approval-required rules
+    if state_is_faulted(state):
+        return PolicyDecision(
+            decision=PolicyDecisionType.DENY,
+            reasons=[
+                "Machine is in fault state and cannot execute requested actions."
+            ],
+            required_approvals=[],
+        )
+
+    if state_is_locked(state):
+        return PolicyDecision(
+            decision=PolicyDecisionType.DENY,
+            reasons=[
+                "Machine is locked and requires reset or acknowledgement before proceeding."
+            ],
+            required_approvals=[],
+        )
+
+    if not requested_angle_from_state_is_safe(state):
+        return PolicyDecision(
+            decision=PolicyDecisionType.DENY,
+            reasons=[
+                "Requested angle from machine state is outside the allowed safe range."
+            ],
+            required_approvals=[],
+        )
+
+    if task_requests_immediate_motion(task) and not state_is_ready(state):
+        return PolicyDecision(
+            decision=PolicyDecisionType.DENY,
+            reasons=[
+                "Immediate motion was requested while the machine is not in READY state."
+            ],
+            required_approvals=[],
+        )
+
+    if risk.risk_level == RiskLevel.CRITICAL:
+        return PolicyDecision(
+            decision=PolicyDecisionType.DENY,
+            reasons=[
+                "Critical-risk actions are denied by default."
+            ],
+            required_approvals=[],
+        )
+
+    # -------------------------------------------------------------------------
+    # APPROVAL-REQUIRED RULES
+    # -------------------------------------------------------------------------
+
     if touches_money:
         reasons.append("Plan includes money-related actions.")
         required_approvals.append("financial_action")
@@ -129,8 +137,11 @@ def evaluate_plan(
         required_approvals.append("destructive_action")
 
     if risk.risk_level == RiskLevel.HIGH:
-        reasons.append("Risk level assessed as high.")
-        required_approvals.append("high_risk_review")
+        if state.approval_granted:
+            reasons.append("High-risk action was approved by an operator through the machine approval channel.")
+        else:
+            reasons.append("Risk level assessed as high.")
+            required_approvals.append("high_risk_review")
 
     if task_requests_review_bypass(task):
         reasons.append("Task text indicates review bypass intent.")
@@ -144,9 +155,10 @@ def evaluate_plan(
         reasons.append("Machine state indicates that approval is currently required.")
         required_approvals.append("machine_state_approval")
 
-    if not state_is_ready(state) and is_destructive:
-        reasons.append("Machine is not in READY state for destructive or actuator-affecting operations.")
-        required_approvals.append("not_ready_state_review")
+    # MEDIUM risk does not automatically require approval.
+    # LOW risk does not automatically require approval.
+    # HIGH risk does.
+    # CRITICAL risk is already denied above.
 
     if required_approvals:
         return PolicyDecision(
@@ -154,6 +166,10 @@ def evaluate_plan(
             reasons=sorted(set(reasons)),
             required_approvals=sorted(set(required_approvals)),
         )
+
+    # -------------------------------------------------------------------------
+    # DEFAULT ALLOW
+    # -------------------------------------------------------------------------
 
     return PolicyDecision(
         decision=PolicyDecisionType.ALLOW,

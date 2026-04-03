@@ -93,4 +93,24 @@ def parse_machine_intent(text: str, current_angle: int | None = None) -> ParsedM
             bypass_signal=bypass_signal,
         )
 
+    # --- MACHINE CONTROL INTENTS ---
+
+    if any(phrase in lowered for phrase in ["enable machine", "turn on machine", "power on machine"]):
+        return ParsedMachineIntent(intent_type="enable_machine", bypass_signal=bypass_signal)
+
+    if any(phrase in lowered for phrase in ["disable machine", "turn off machine", "power off machine"]):
+        return ParsedMachineIntent(intent_type="disable_machine", bypass_signal=bypass_signal)
+
+    if any(phrase in lowered for phrase in ["prepare machine", "bring to ready", "set ready"]):
+        return ParsedMachineIntent(intent_type="set_ready", bypass_signal=bypass_signal)
+
+    if any(phrase in lowered for phrase in ["start operation", "start machine", "go active"]):
+        return ParsedMachineIntent(intent_type="start_active", bypass_signal=bypass_signal)
+
+    if any(phrase in lowered for phrase in ["stop machine", "stop operation", "go idle"]):
+        return ParsedMachineIntent(intent_type="set_idle", bypass_signal=bypass_signal)
+
+    if "safe test" in lowered or "test movement" in lowered:
+        return ParsedMachineIntent(intent_type="test_sequence", bypass_signal=bypass_signal)
+
     return None
