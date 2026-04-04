@@ -266,42 +266,48 @@ def build_machine_execution_bundle(
             return ExecutionBundle(actions=actions)
 
         if parsed.intent_type == "recover_fault":
-            if working_state.fault_active:
-                append_action(
-                    MachineAction(
-                        action_type=MachineActionType.CLEAR_FAULT,
-                        target_value=None,
-                        reason="Clear active machine fault.",
-                    )
-                )
+            if not working_state.fault_active:
+                return ExecutionBundle(actions=actions)
 
             append_action(
                 MachineAction(
-                    action_type=MachineActionType.DISABLE_MACHINE,
+                    action_type=MachineActionType.CLEAR_FAULT,
                     target_value=None,
-                    reason="Return recovered machine to safe OFF baseline.",
+                    reason="Clear active machine fault.",
                 )
             )
+
+            if working_state.machine_enabled or working_state.machine_mode != MachineMode.OFF:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.DISABLE_MACHINE,
+                        target_value=None,
+                        reason="Return recovered machine to safe OFF baseline.",
+                    )
+                )
 
             return ExecutionBundle(actions=actions)
 
         if parsed.intent_type == "unlock_machine":
-            if working_state.lock_active:
-                append_action(
-                    MachineAction(
-                        action_type=MachineActionType.UNLOCK_MACHINE,
-                        target_value=None,
-                        reason="Clear active machine lock.",
-                    )
-                )
+            if not working_state.lock_active:
+                return ExecutionBundle(actions=actions)
 
             append_action(
                 MachineAction(
-                    action_type=MachineActionType.DISABLE_MACHINE,
+                    action_type=MachineActionType.UNLOCK_MACHINE,
                     target_value=None,
-                    reason="Return unlocked machine to safe OFF baseline.",
+                    reason="Clear active machine lock.",
                 )
             )
+
+            if working_state.machine_enabled or working_state.machine_mode != MachineMode.OFF:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.DISABLE_MACHINE,
+                        target_value=None,
+                        reason="Return unlocked machine to safe OFF baseline.",
+                    )
+                )
 
             return ExecutionBundle(actions=actions)
 
