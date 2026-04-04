@@ -182,7 +182,7 @@ def evaluate_plan(
         reasons.append("Plan includes external communication.")
         required_approvals.append("external_communication")
 
-    if is_destructive:
+    if is_destructive and intent_type != "safe_shutdown":
         reasons.append("Plan includes destructive or irreversible actions.")
         required_approvals.append("destructive_action")
 

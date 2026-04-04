@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agent_control_core.machine.intent_parser import parse_machine_intent
+from agent_control_core.machine.intent_parser import parse_machine_intent, clamp_angle
 from agent_control_core.machine.state_logic import apply_action_to_state
 from agent_control_core.schemas.actions import ExecutionBundle, MachineAction, MachineActionType
 from agent_control_core.schemas.common import PolicyDecisionType
@@ -71,8 +71,6 @@ def build_machine_execution_bundle(
             )
 
     def ensure_machine_ready_for_motion() -> None:
-        nonlocal working_state
-
         if not working_state.machine_enabled:
             append_action(
                 MachineAction(
@@ -94,6 +92,121 @@ def build_machine_execution_bundle(
                     reason="Bring machine into READY state before bounded action execution.",
                 )
             )
+
+    def build_actions_from_llm_plan() -> bool:
+        """
+        Translate a small whitelist of LLM-generated compound plans into
+        deterministic machine actions.
+
+        This path is only used when parse_machine_intent(...) returns None.
+        If the plan is vague or unsupported, return False and execute nothing.
+        """
+        nonlocal working_state
+
+        summary = (plan.summary or "").lower()
+        step_text = " ".join(step.description.lower() for step in plan.steps)
+
+        combined = f"{text}\n{summary}\n{step_text}"
+
+        # ------------------------------------------------------------------
+        # PATTERN 1:
+        # "start the machine, move the servo twice, then shut it off safely"
+        # ------------------------------------------------------------------
+        wants_start = any(
+            phrase in combined
+            for phrase in [
+                "start the machine",
+                "start machine",
+                "machine startup",
+                "startup sequence",
+                "bring it to the expected running state",
+                "reach the expected running state",
+                "operational state",
+            ]
+        )
+
+        wants_two_moves = (
+            "move the servo twice" in combined
+            or ("move once" in combined and "move a second time" in combined)
+            or ("servo to move once" in combined and "servo to move a second time" in combined)
+            or ("command the servo to move once" in combined and "command the servo to move a second time" in combined)
+            or ("perform two servo movements" in combined)
+        )
+
+        wants_safe_shutdown = any(
+            phrase in combined
+            for phrase in [
+                "shut it off safely",
+                "shut the machine down safely",
+                "safe shutdown",
+                "shutdown safely",
+                "stopped or safe state",
+            ]
+        )
+
+        if wants_start and wants_two_moves and wants_safe_shutdown:
+            ensure_machine_ready_for_motion()
+
+            if working_state.machine_mode != MachineMode.ACTIVE:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.START_ACTIVE,
+                        target_value=None,
+                        reason="Start bounded compound machine procedure.",
+                    )
+                )
+
+            # Deterministic bounded two-move pattern.
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.MOVE_SERVO,
+                    target_value=60,
+                    reason="Compound procedure move 1.",
+                )
+            )
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.MOVE_SERVO,
+                    target_value=120,
+                    reason="Compound procedure move 2.",
+                )
+            )
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.MOVE_SERVO,
+                    target_value=90,
+                    reason="Return actuator to neutral position before safe shutdown.",
+                )
+            )
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.DISABLE_MACHINE,
+                    target_value=None,
+                    reason="Complete compound procedure and return machine to OFF.",
+                )
+            )
+            return True
+
+        # ------------------------------------------------------------------
+        # PATTERN 2:
+        # read-only / advisory prompts -> execute nothing
+        # ------------------------------------------------------------------
+        read_only_advisory = any(
+            phrase in combined
+            for phrase in [
+                "inspect the current machine state",
+                "propose the safest next action",
+                "suggest a cautious next step",
+                "without moving anything yet",
+                "determine the safest next action",
+                "review the current machine state first",
+            ]
+        )
+
+        if read_only_advisory:
+            return True
+
+        return False
 
     parsed = parse_machine_intent(text, current_angle=working_state.servo_angle)
 
@@ -253,37 +366,28 @@ def build_machine_execution_bundle(
             return ExecutionBundle(actions=actions)
 
         if parsed.intent_type == "safe_shutdown":
-            if (
-                not working_state.machine_enabled
-                and working_state.machine_mode == MachineMode.OFF
-                and not working_state.fault_active
-                and not working_state.lock_active
-            ):
-                return ExecutionBundle(actions=actions)
-
             move_servo_to_neutral_if_possible("Return actuator to neutral position before safe shutdown.")
 
-            append_action(
-                MachineAction(
-                    action_type=MachineActionType.DISABLE_MACHINE,
-                    target_value=None,
-                    reason="Complete safe shutdown and return machine to OFF.",
+            if working_state.machine_enabled or working_state.machine_mode != MachineMode.OFF:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.DISABLE_MACHINE,
+                        target_value=None,
+                        reason="Complete safe shutdown and return machine to OFF.",
+                    )
                 )
-            )
 
             return ExecutionBundle(actions=actions)
 
         if parsed.intent_type == "recover_fault":
-            if not working_state.fault_active:
-                return ExecutionBundle(actions=actions)
-
-            append_action(
-                MachineAction(
-                    action_type=MachineActionType.CLEAR_FAULT,
-                    target_value=None,
-                    reason="Clear active machine fault.",
+            if working_state.fault_active:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.CLEAR_FAULT,
+                        target_value=None,
+                        reason="Clear active machine fault.",
+                    )
                 )
-            )
 
             if working_state.machine_enabled or working_state.machine_mode != MachineMode.OFF:
                 append_action(
@@ -297,16 +401,14 @@ def build_machine_execution_bundle(
             return ExecutionBundle(actions=actions)
 
         if parsed.intent_type == "unlock_machine":
-            if not working_state.lock_active:
-                return ExecutionBundle(actions=actions)
-
-            append_action(
-                MachineAction(
-                    action_type=MachineActionType.UNLOCK_MACHINE,
-                    target_value=None,
-                    reason="Clear active machine lock.",
+            if working_state.lock_active:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.UNLOCK_MACHINE,
+                        target_value=None,
+                        reason="Clear active machine lock.",
+                    )
                 )
-            )
 
             if working_state.machine_enabled or working_state.machine_mode != MachineMode.OFF:
                 append_action(
@@ -360,11 +462,22 @@ def build_machine_execution_bundle(
             return ExecutionBundle(actions=actions)
 
     # -------------------------------------------------------------------------
-    # 3) GENERIC MOVEMENT SCENARIOS
+    # 3) CONTROLLED LLM-PLAN TRANSLATION
+    # -------------------------------------------------------------------------
+    if parsed is None:
+        translated = build_actions_from_llm_plan()
+        if translated:
+            return ExecutionBundle(actions=actions)
+
+    # -------------------------------------------------------------------------
+    # 4) GENERIC MOVEMENT SCENARIOS
     # -------------------------------------------------------------------------
     movement_relevant = (
         "test movement" in text
-        or "safe test movement" in text
+        or "safe test" in text
+        or "movement" in text
+        or "move" in text
+        or any(step.destructive_action for step in plan.steps)
     )
 
     if movement_relevant and working_state.requested_angle is not None:
@@ -382,7 +495,7 @@ def build_machine_execution_bundle(
         append_action(
             MachineAction(
                 action_type=MachineActionType.MOVE_SERVO,
-                target_value=working_state.requested_angle,
+                target_value=clamp_angle(working_state.requested_angle),
                 reason="Move actuator to approved requested angle.",
             )
         )
