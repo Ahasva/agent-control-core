@@ -597,6 +597,7 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
 
             if serial_link is not None:
                 final_status = request_fresh_status(serial_link)
+                print_section("ARDUINO STATUS AFTER EXECUTION", {"status": final_status})
                 state_after_execution = merge_hardware_status_into_state(
                     state_after_execution,
                     final_status,
@@ -664,6 +665,7 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
 
                         if serial_link is not None:
                             final_status = request_fresh_status(serial_link)
+                            print_section("ARDUINO STATUS AFTER EXECUTION", {"status": final_status})
                             state_after_execution = merge_hardware_status_into_state(
                                 state_after_execution,
                                 final_status,
@@ -678,15 +680,31 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
                             decision="allow",
                             rationale=f"Executed {len(execution_bundle.actions)} machine action(s).",
                         )
+
                     else:
                         print("Approval was received, but policy still denied execution.")
+
                 else:
+                    if serial_link is not None:
+                        serial_link.send_command("SET_STATE OFF")
+                        serial_link.send_command("DISABLE_MACHINE")
+                        final_status = request_fresh_status(serial_link)
+                        print_section("APPROVAL TIMEOUT RESET", {"status": final_status})
+                        state = merge_hardware_status_into_state(state, final_status)
                     print("Approval not received. No execution performed.")
             else:
                 print("Approval required, but no hardware approval channel is available.")
 
         else:
-            if serial_link is not None:
+            should_force_fault = (
+                risk.risk_level == RiskLevel.CRITICAL
+                or any(
+                    "override or bypass safety constraints" in reason.lower()
+                    for reason in policy_decision.reasons
+                )
+            )
+
+            if serial_link is not None and should_force_fault:
                 serial_link.send_command("SET_STATE FAULT")
                 serial_link.send_command("BUZZER ALERT")
 
@@ -727,7 +745,8 @@ def main() -> None:
     print("Type a command, or 'exit' to quit.")
 
     while True:
-        user_text = input("\noperator> ").strip()
+        print("\n" + "=" * 80)
+        user_text = input("\033[1;36mOPERATOR COMMAND  >  \033[0m").strip()
 
         if not user_text:
             continue

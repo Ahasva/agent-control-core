@@ -228,7 +228,7 @@ def parse_status_line(status_line: str) -> dict[str, str]:
 def read_latest_status(serial_link, attempts: int = 12) -> str | None:
     for i in range(attempts):
         line = serial_link.read_line()
-        print(f"DEBUG SERIAL [{i}]: {line!r}")  # temporary
+        #print(f"DEBUG SERIAL [{i}]: {line!r}")  
 
         if not line:
             continue
