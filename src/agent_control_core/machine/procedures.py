@@ -19,8 +19,7 @@ def build_machine_execution_bundle(
     if policy_decision.decision != PolicyDecisionType.ALLOW:
         return ExecutionBundle(actions=[])
 
-    task_text = task.goal.lower().strip()
-    full_text = f"{task.goal} {task.context or ''}".lower()
+    text = f"{task.goal} {task.context or ''}".lower()
     actions: list[MachineAction] = []
     working_state = state
 
@@ -44,6 +43,33 @@ def build_machine_execution_bundle(
             working_state.lock_active,
         )
 
+    def can_neutralize_servo() -> bool:
+        return (
+            working_state.machine_enabled
+            and working_state.machine_mode in {MachineMode.READY, MachineMode.ACTIVE, MachineMode.CALIBRATION}
+            and not working_state.fault_active
+            and not working_state.lock_active
+        )
+
+    def move_servo_to_neutral_if_possible(reason: str) -> None:
+        if working_state.servo_angle != 90 and can_neutralize_servo():
+            if working_state.machine_mode != MachineMode.ACTIVE:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.START_ACTIVE,
+                        target_value=None,
+                        reason="Enter ACTIVE mode to perform bounded neutral-position move.",
+                    )
+                )
+
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.MOVE_SERVO,
+                    target_value=90,
+                    reason=reason,
+                )
+            )
+
     def ensure_machine_ready_for_motion() -> None:
         nonlocal working_state
 
@@ -56,6 +82,10 @@ def build_machine_execution_bundle(
                 )
             )
 
+        if working_state.machine_mode == MachineMode.OFF:
+            # ENABLE_MACHINE moves OFF -> IDLE in state logic.
+            pass
+
         if working_state.machine_mode == MachineMode.IDLE:
             append_action(
                 MachineAction(
@@ -65,7 +95,7 @@ def build_machine_execution_bundle(
                 )
             )
 
-    parsed = parse_machine_intent(task_text, current_angle=working_state.servo_angle)
+    parsed = parse_machine_intent(text, current_angle=working_state.servo_angle)
 
     # -------------------------------------------------------------------------
     # 1) MACHINE CONTROL COMMANDS
@@ -83,6 +113,7 @@ def build_machine_execution_bundle(
             return ExecutionBundle(actions=actions)
 
         if parsed.intent_type == "disable_machine":
+            move_servo_to_neutral_if_possible("Return actuator to neutral position before shutdown.")
             append_action(
                 MachineAction(
                     action_type=MachineActionType.DISABLE_MACHINE,
@@ -115,19 +146,11 @@ def build_machine_execution_bundle(
                     MachineAction(
                         action_type=MachineActionType.SET_READY,
                         target_value=None,
-                        reason="Leave ACTIVE mode before stopping the machine.",
+                        reason="Leave ACTIVE mode before returning to IDLE.",
                     )
                 )
 
-            if working_state.machine_enabled:
-                append_action(
-                    MachineAction(
-                        action_type=MachineActionType.DISABLE_MACHINE,
-                        target_value=None,
-                        reason="Operator requested machine stop.",
-                    )
-                )
-            elif working_state.machine_mode != MachineMode.IDLE:
+            if working_state.machine_mode == MachineMode.READY:
                 append_action(
                     MachineAction(
                         action_type=MachineActionType.SET_IDLE,
@@ -214,7 +237,7 @@ def build_machine_execution_bundle(
             )
 
             return ExecutionBundle(actions=actions)
-        
+
         if parsed.intent_type == "startup_sequence":
             ensure_machine_ready_for_motion()
 
@@ -230,21 +253,7 @@ def build_machine_execution_bundle(
             return ExecutionBundle(actions=actions)
 
         if parsed.intent_type == "safe_shutdown":
-            if working_state.machine_mode == MachineMode.ACTIVE:
-                append_action(
-                    MachineAction(
-                        action_type=MachineActionType.MOVE_SERVO,
-                        target_value=90,
-                        reason="Return actuator to neutral position before shutdown.",
-                    )
-                )
-                append_action(
-                    MachineAction(
-                        action_type=MachineActionType.SET_READY,
-                        target_value=None,
-                        reason="Leave ACTIVE mode before shutdown.",
-                    )
-                )
+            move_servo_to_neutral_if_possible("Return actuator to neutral position before safe shutdown.")
 
             append_action(
                 MachineAction(
@@ -266,15 +275,6 @@ def build_machine_execution_bundle(
                     )
                 )
 
-            if working_state.lock_active:
-                append_action(
-                    MachineAction(
-                        action_type=MachineActionType.UNLOCK_MACHINE,
-                        target_value=None,
-                        reason="Unlock machine during guarded recovery.",
-                    )
-                )
-
             append_action(
                 MachineAction(
                     action_type=MachineActionType.DISABLE_MACHINE,
@@ -282,6 +282,38 @@ def build_machine_execution_bundle(
                     reason="Return recovered machine to safe OFF baseline.",
                 )
             )
+
+            return ExecutionBundle(actions=actions)
+
+        if parsed.intent_type == "unlock_machine":
+            if working_state.lock_active:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.UNLOCK_MACHINE,
+                        target_value=None,
+                        reason="Clear active machine lock.",
+                    )
+                )
+
+            append_action(
+                MachineAction(
+                    action_type=MachineActionType.DISABLE_MACHINE,
+                    target_value=None,
+                    reason="Return unlocked machine to safe OFF baseline.",
+                )
+            )
+
+            return ExecutionBundle(actions=actions)
+
+        if parsed.intent_type == "lock_machine":
+            if not working_state.lock_active:
+                append_action(
+                    MachineAction(
+                        action_type=MachineActionType.LOCK_MACHINE,
+                        target_value=None,
+                        reason="Operator requested lock state.",
+                    )
+                )
 
             return ExecutionBundle(actions=actions)
 
@@ -317,10 +349,10 @@ def build_machine_execution_bundle(
     # 3) GENERIC MOVEMENT SCENARIOS
     # -------------------------------------------------------------------------
     movement_relevant = (
-        "test movement" in full_text
-        or "safe test" in full_text
-        or "movement" in full_text
-        or "move" in full_text
+        "test movement" in text
+        or "safe test" in text
+        or "movement" in text
+        or "move" in text
         or any(step.destructive_action for step in plan.steps)
     )
 

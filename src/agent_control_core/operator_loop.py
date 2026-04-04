@@ -422,70 +422,6 @@ def build_machine_intent_plan(user_text: str, state: SystemState) -> ExecutionPl
             ],
         )
 
-    if parsed.intent_type == "safe_shutdown":
-        return ExecutionPlan(
-            summary="Run a safe shutdown sequence and return the machine to OFF.",
-            steps=[
-                PlanStep(
-                    step_id="step-1",
-                    description="Inspect current machine state.",
-                    tool_name="state_reader",
-                    requires_network=False,
-                    touches_money=False,
-                    touches_credentials=False,
-                    touches_external_comms=False,
-                    destructive_action=False,
-                ),
-                PlanStep(
-                    step_id="step-2",
-                    description="Move to a safe neutral position if needed and disable the machine.",
-                    tool_name="machine_controller",
-                    requires_network=False,
-                    touches_money=False,
-                    touches_credentials=False,
-                    touches_external_comms=False,
-                    destructive_action=False,
-                ),
-            ],
-        )
-
-    if parsed.intent_type == "startup_sequence":
-        return ExecutionPlan(
-            summary="Run a guarded startup sequence to bring the machine from OFF/IDLE to ACTIVE.",
-            steps=[
-                PlanStep(
-                    step_id="step-1",
-                    description="Inspect current machine state.",
-                    tool_name="state_reader",
-                    requires_network=False,
-                    touches_money=False,
-                    touches_credentials=False,
-                    touches_external_comms=False,
-                    destructive_action=False,
-                ),
-                PlanStep(
-                    step_id="step-2",
-                    description="Enable the machine and bring it to READY state if needed.",
-                    tool_name="machine_controller",
-                    requires_network=False,
-                    touches_money=False,
-                    touches_credentials=False,
-                    touches_external_comms=False,
-                    destructive_action=False,
-                ),
-                PlanStep(
-                    step_id="step-3",
-                    description="Start ACTIVE mode under bounded machine rules.",
-                    tool_name="machine_controller",
-                    requires_network=False,
-                    touches_money=False,
-                    touches_credentials=False,
-                    touches_external_comms=False,
-                    destructive_action=False,
-                ),
-            ],
-        )
-
     return None
 
 
@@ -501,7 +437,7 @@ def build_machine_intent_risk(user_text: str, state: SystemState) -> RiskAssessm
             sensitive_capabilities=["machine state control"],
         )
 
-    if parsed.intent_type in {"start_active", "test_sequence", "startup_sequence", "safe_shutdown"}:
+    if parsed.intent_type in {"start_active", "test_sequence"}:
         return RiskAssessment(
             risk_level=RiskLevel.MEDIUM,
             reasons=["The request prepares or starts bounded machine activity."],

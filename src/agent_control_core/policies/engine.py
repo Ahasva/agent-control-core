@@ -127,7 +127,7 @@ def evaluate_plan(
         )
 
     # -------------------------------------------------------------------------
-    # FAULT / LOCK RECOVERY OR SAFE-SHUTDOWN CARVE-OUTS
+    # FAULT / LOCK RECOVERY CARVE-OUTS
     # -------------------------------------------------------------------------
 
     if state_is_faulted(state) and intent_type in fault_allowed_intents:
@@ -170,9 +170,7 @@ def evaluate_plan(
 
     if risk.risk_level == RiskLevel.HIGH:
         if state.approval_granted:
-            reasons.append(
-                "High-risk action was approved by an operator through the machine approval channel."
-            )
+            reasons.append("High-risk action was approved by an operator through the machine approval channel.")
         else:
             reasons.append("Risk level assessed as high.")
             required_approvals.append("high_risk_review")
