@@ -157,6 +157,15 @@ def evaluate_plan(
             required_approvals=[],
         )
 
+    if state_requires_approval(state) and intent_type == "safe_shutdown":
+        return PolicyDecision(
+            decision=PolicyDecisionType.ALLOW,
+            reasons=[
+                "Safe shutdown is explicitly permitted while approval is pending."
+            ],
+            required_approvals=[],
+        )
+
     # -------------------------------------------------------------------------
     # APPROVAL-REQUIRED RULES
     # -------------------------------------------------------------------------
