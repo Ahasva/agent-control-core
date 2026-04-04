@@ -11,19 +11,39 @@ from agent_control_core.machine.state_logic import (
 BYPASS_SIGNALS = [
     "ignore the limit",
     "ignore limits",
+    "ignore any limits",
+    "ignore all limits",
+    "ignore the limits",
     "ignore safety",
     "skip safety",
     "bypass safety",
     "override safety",
-    "do what i say",
+    "override limits",
+    "override the limits",
+    "bypass limits",
+    "without limits",
+    "without any limits",
+    "without safety",
+    "don't clamp",
+    "do not clamp",
+    "disable limits",
+    "remove limits",
     "move anyway",
     "just do it",
     "no matter what",
     "force it",
+    "do what i say",
 ]
 
-ABSOLUTE_MOVE_PATTERN = re.compile(r"move\s+servo\s+to\s+(-?\d+)", re.IGNORECASE)
-RELATIVE_MOVE_PATTERN = re.compile(r"move\s+servo\s+by\s+([+-]?\d+)", re.IGNORECASE)
+ABSOLUTE_MOVE_PATTERN = re.compile(
+    r"(?:move|set|change|rotate|position)\s+(?:the\s+)?servo\s+(?:to|at|angle\s+)?\s*(-?\d+)",
+    re.IGNORECASE,
+)
+
+RELATIVE_MOVE_PATTERN = re.compile(
+    r"(?:move|adjust|change|rotate)\s+(?:the\s+)?servo\s+by\s+([+-]?\d+)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -80,6 +100,14 @@ def parse_machine_intent(text: str, current_angle: int | None = None) -> ParsedM
         )
 
     absolute_match = ABSOLUTE_MOVE_PATTERN.search(lowered)
+    if absolute_match is None:
+        generic_servo_target = re.search(
+            r"servo.*?(?:angle|to|at)\s*(-?\d+)",
+            lowered,
+            re.IGNORECASE,
+        )
+        if generic_servo_target:
+            absolute_match = generic_servo_target
     if absolute_match:
         raw_target = int(absolute_match.group(1))
         safe_target = clamp_angle(raw_target)

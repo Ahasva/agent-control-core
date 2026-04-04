@@ -6,6 +6,46 @@ This project focuses on **safety, governance, and human oversight** in agentic A
 
 ---
 
+## Table of Contents
+
+- [Problem](#problem)
+- [Solution](#solution)
+- [Core Capabilities](#core-capabilities)
+  - [Structured Task Intake](#structured-task-intake)
+  - [Plan Generation](#plan-generation)
+  - [Risk Assessment](#risk-assessment)
+  - [Policy Enforcement](#policy-enforcement)
+  - [Approval Workflow](#approval-workflow)
+  - [Audit Logging](#audit-logging)
+  - [Guardrails Against Rogue Agents](#guardrails-against-rogue-agents)
+- [Generic Demo](#generic-demo)
+  - [Included scenarios](#included-scenarios)
+  - [Generic demo pipeline](#generic-demo-pipeline)
+- [Machine Demo: Guarded Machine Cell](#machine-demo-guarded-machine-cell)
+  - [What it demonstrates](#what-it-demonstrates)
+  - [Included machine scenarios](#included-machine-scenarios)
+- [Interactive Operator Loop](#interactive-operator-loop)
+- [System Overview](#system-overview)
+- [High-Level Architecture](#high-level-architecture)
+- [Runtime Flow](#runtime-flow)
+- [Data Model](#data-model)
+- [Configuration](#configuration)
+- [Modes](#modes)
+  - [Mock mode](#mock-mode)
+  - [Live mode](#live-mode)
+- [Tech Stack](#tech-stack)
+- [Design Principles](#design-principles)
+- [Why this project matters](#why-this-project-matters)
+- [Project Direction](#project-direction)
+- [Status](#status)
+- [Prototype Scope](#prototype-scope)
+- [Current Limitations](#current-limitations)
+- [Example Validation Scenarios](#example-validation-scenarios)
+- [Current Safety Behaviors](#current-safety-behaviors)
+- [What the Prototype Already Proves](#what-the-prototype-already-proves)
+
+---
+
 ## Problem
 
 As AI agents gain access to tools, they can:
@@ -88,9 +128,7 @@ Every major step is logged, including:
 - approval requested
 - execution allowed or denied
 
----
-
-## Guardrails Against Rogue Agents
+### Guardrails Against Rogue Agents
 
 This system explicitly protects against:
 
@@ -153,42 +191,72 @@ python -m agent_control_core.machine_demo
 ### What it demonstrates
 
 The machine demo connects the same control core to a small physical system with:
-	•	machine state
-	•	servo motion
-	•	approval input
-	•	fault handling
-	•	guarded execution over USB serial
+- machine state
+- servo motion
+- approval input
+- fault handling
+- guarded execution over USB serial
 
 ### Included machine scenarios
-	1.	Safe bounded movement
-	•	machine starts in READY
-	•	policy allows execution
-	•	servo moves to the operator setpoint
-	2.	Calibration with human approval
-	•	machine requires approval
-	•	operator presses Button A
-	•	policy is re-evaluated
-	•	calibration sequence executes
-	3.	Unsafe immediate motion request
-	•	request attempts to bypass normal readiness checks
-	•	policy denies execution
-	•	machine enters FAULT
+1.	Safe bounded movement
+  - machine starts in READY
+  - policy allows execution
+  - servo moves to the operator setpoint
+2.	Calibration with human approval
+  - machine requires approval
+  - operator presses Button A
+  - policy is re-evaluated
+  - calibration sequence executes
+3.	Unsafe immediate motion request
+  - request attempts to bypass normal readiness checks
+  - policy denies execution
+  - machine enters FAULT
 
 This demonstrates the project’s central principle:
 
 AI can propose actions, but deterministic policy, machine state, and human approval decide what is actually executed.
 
-⸻
+---
+
+## Interactive Operator Loop
+
+The repository also includes an interactive CLI for guarded machine control:
+
+```bash
+    python -m agent_control_core.operator_loop
+```
+
+This operator loop is intended for prototype validation of agent-assisted machine control under deterministic guardrails.
+
+It demonstrates:
+- live machine-state reads over USB serial
+- deterministic machine intent parsing for common operator commands
+- bounded servo motion
+- approval-gated high-risk actions
+- fault and lock recovery
+- explicit denial of safety-bypass attempts
+- audit logging for every major decision step
+
+The operator loop follows a strict preference order:
+1. deterministic machine intent parsing
+2. deterministic machine-specific risk assessment
+3. deterministic policy evaluation
+4. machine execution bundle generation
+5. physical execution only for allowed actions
+
+The operator loop is designed to fail closed for unrecognized or unsafe machine-control requests, and the current implementation prioritizes deterministic parsing before any generic planning is considered.
+
+---
 
 ## System Overview
 
 At a high level, the system separates:
-	•	intent
-	•	planning
-	•	risk estimation
-	•	policy enforcement
-	•	execution
-	•	auditability
+- intent
+- planning
+- risk estimation
+- policy enforcement
+- execution
+- auditability
 
 ```mermaid
 flowchart TD
@@ -251,10 +319,10 @@ flowchart LR
 ```
 
 ### Core meanings
-	•	TaskRequest = raw user intent
-	•	ExecutionPlan = proposed actions
-	•	RiskAssessment = advisory judgment
-	•	PolicyDecision = deterministic enforced outcome
+- TaskRequest = raw user intent
+- ExecutionPlan = proposed actions
+- RiskAssessment = advisory judgment
+- PolicyDecision = deterministic enforced outcome
 
 The key safety property is that the system does not rely on LLM output alone.
 
@@ -265,10 +333,10 @@ The key safety property is that the system does not rely on LLM output alone.
 Environment variables are loaded from .env.
 
 Typical settings include:
-	•	model configuration
-	•	API keys
-	•	app settings
-	•	serial connection settings for the machine demo
+- model configuration
+- API keys
+- app settings
+- serial connection settings for the machine demo
 
 Example:
 ```bash
@@ -292,33 +360,34 @@ USE_MOCK_LLM=true
 
 ### Live mode
 
+Live model calls:
 ```bash
 USE_MOCK_LLM=false
 ```
 
-For the machine demo, mock mode is recommended for a stable presentation.
+For the machine demo, mock mode is recommended for a stable presentation. But if `USE_MOCK_LLM` is set to `false` interaction with LLM (that is defined in the `.env` file) is possible and working.
 
 ---
 
 ## Tech Stack
-	•	Python
-	•	Pydantic
-	•	structured LLM outputs
-	•	rule-based policy engine
-	•	JSON audit logging
-	•	Arduino C++ for the machine demo
-	•	USB serial communication for controlled execution
+- Python
+- Pydantic
+- structured LLM outputs
+- rule-based policy engine
+- JSON audit logging
+- Arduino C++ for the machine demo
+- USB serial communication for controlled execution
 
 ---
 
 ## Design Principles
-	•	structured outputs by default
-	•	least privilege
-	•	fail closed on uncertainty
-	•	human approval for sensitive actions
-	•	auditability
-	•	separation of planning, policy, and execution
-	•	deterministic enforcement over model suggestion
+- structured outputs by default
+- least privilege
+- fail closed on uncertainty
+- human approval for sensitive actions
+- auditability
+- separation of planning, policy, and execution
+- deterministic enforcement over model suggestion
 
 ---
 
@@ -342,27 +411,103 @@ It is about building systems in which intelligent components remain governable.
 ## Project Direction
 
 This repository should be understood as:
-	•	a control architecture for AI-assisted systems
-	•	a foundation for state-aware guarded execution
-	•	a prototype for controlled intelligent systems
+- a control architecture for AI-assisted systems
+- a foundation for state-aware guarded execution
+- a prototype for controlled intelligent systems
 
 That applies to domains such as:
-	•	industrial automation
-	•	robotics
-	•	production systems
-	•	lab or machine workflows
-	•	enterprise agent tooling
+- industrial automation
+- robotics
+- production systems
+- lab or machine workflows
+- enterprise agent tooling
 
 ---
 
 ## Status
 
 Current repository scope includes:
-	•	task intake
-	•	structured planning
-	•	risk assessment
-	•	deterministic policy checks
-	•	approval gating
-	•	audit logging
-	•	state-aware machine demo
-	•	guarded Arduino execution over USB
+- task intake
+- structured planning
+- risk assessment
+- deterministic policy checks
+- approval gating
+- audit logging
+- state-aware machine demo
+- guarded Arduino execution over USB
+
+---
+
+## Prototype Scope
+
+This project is a prototype for evaluating whether an agent can participate in machine control safely when placed behind deterministic guardrails.
+
+It is not intended as a fully autonomous industrial controller.
+
+What the prototype is meant to prove or disprove:
+
+- whether natural-language requests can be converted into bounded machine actions safely
+- whether deterministic policy can overrule unsafe or ambiguous model output
+- whether hardware approval and machine state can be enforced as first-class control inputs
+- whether the system fails closed on unsafe, ambiguous, or adversarial requests
+- whether an allowed policy decision can still result in zero physical execution
+
+---
+
+## Current Limitations
+
+Current limitations include:
+
+- machine intent parsing still depends on phrase coverage rather than a formal grammar
+- deterministic parsing is strong but not complete
+- ambiguous machine-like requests are handled conservatively but still evolving
+- limited to a single guarded machine-cell prototype
+- validation is scenario-based rather than benchmark-driven
+
+---
+
+## Example Validation Scenarios
+
+The prototype should consistently demonstrate:
+- bounded motion within limits → allow
+- out-of-range motion → require approval
+- explicit safety-bypass attempt → deny
+- fault recovery → allow
+- lock recovery → allow
+- safe shutdown from OFF → allow with zero actions
+- repeated lock request while already locked → deny
+- ambiguous machine-control request with bypass language → deny or fail closed
+
+---
+
+## Current Safety Behaviors
+
+The prototype currently demonstrates:
+- bounded actuator motion
+- automatic clamping of unsafe inputs
+- approval gating for elevated risk
+- approval timeout → reset to OFF
+- denial of safety-bypass attempts
+- critical bypass → FAULT state
+- LOCKED state blocks execution
+- FAULT state blocks execution
+- safe-state requests may result in zero actions
+
+---
+
+## What the Prototype Already Proves
+
+This prototype answers the core question:
+
+| Can an agent participate in machine control safely under deterministic guardrails?
+
+**Yes — as a controlled, auditable prototype.**
+
+It demonstrates that:
+- natural language can drive bounded machine actions
+- deterministic policy overrides unsafe behavior
+- machine state is a hard execution constraint
+- approval is enforceable in hardware
+- unsafe or ambiguous requests fail safely
+- execution can be separated from model suggestion
+- physical actuation remains auditable and controlled

@@ -52,6 +52,45 @@ def read_live_state(serial_link) -> SystemState:
     return state
 
 
+def looks_like_machine_control_text(user_text: str) -> bool:
+    lowered = user_text.strip().lower()
+    machine_terms = [
+        "servo",
+        "angle",
+        "machine",
+        "actuator",
+        "move",
+        "rotate",
+        "position",
+        "lock",
+        "unlock",
+        "fault",
+        "shutdown",
+        "start",
+        "ready",
+    ]
+    return any(term in lowered for term in machine_terms)
+
+
+def looks_like_safety_bypass_text(user_text: str) -> bool:
+    lowered = user_text.strip().lower()
+    bypass_terms = [
+        "ignore limits",
+        "ignore any limits",
+        "ignore safety",
+        "bypass safety",
+        "override safety",
+        "override limits",
+        "bypass limits",
+        "without limits",
+        "don't clamp",
+        "do not clamp",
+        "force it",
+        "move anyway",
+    ]
+    return any(term in lowered for term in bypass_terms)
+
+
 def build_machine_intent_plan(user_text: str, state: SystemState) -> ExecutionPlan | None:
     parsed = parse_machine_intent(user_text, current_angle=state.servo_angle)
     if parsed is None:
@@ -540,6 +579,120 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
 
         machine_plan = build_machine_intent_plan(user_text, state)
 
+        if machine_plan is None and looks_like_machine_control_text(user_text):
+            if looks_like_safety_bypass_text(user_text):
+                risk = RiskAssessment(
+                    risk_level=RiskLevel.CRITICAL,
+                    reasons=[
+                        "The request appears to target physical machine control.",
+                        "The task text includes pressure or bypass language intended to override safety limits.",
+                        "Deterministic machine intent parsing did not confidently recognize a safe bounded command.",
+                    ],
+                    sensitive_capabilities=[
+                        "physical machine control",
+                        "unsafe motion command handling",
+                        "safety bypass attempt",
+                        "parser-confidence fallback",
+                    ],
+                )
+
+                plan = ExecutionPlan(
+                    summary="Reject ambiguous machine-control request with safety-bypass language.",
+                    steps=[
+                        PlanStep(
+                            step_id="step-1",
+                            description="Refuse unsafe or ambiguous machine-control request.",
+                            tool_name="state_reader",
+                            requires_network=False,
+                            touches_money=False,
+                            touches_credentials=False,
+                            touches_external_comms=False,
+                            destructive_action=False,
+                        )
+                    ],
+                )
+            else:
+                plan = ExecutionPlan(
+                    summary="Inspect ambiguous machine-control request before allowing any execution.",
+                    steps=[
+                        PlanStep(
+                            step_id="step-1",
+                            description="Inspect current machine state and refuse execution until a recognized bounded command is provided.",
+                            tool_name="state_reader",
+                            requires_network=False,
+                            touches_money=False,
+                            touches_credentials=False,
+                            touches_external_comms=False,
+                            destructive_action=False,
+                        )
+                    ],
+                )
+                risk = RiskAssessment(
+                    risk_level=RiskLevel.HIGH,
+                    reasons=[
+                        "The request appears to target physical machine control.",
+                        "Deterministic machine intent parsing did not confidently recognize a bounded command.",
+                        "Ambiguous physical-control requests should require explicit review rather than generic planning.",
+                    ],
+                    sensitive_capabilities=[
+                        "physical machine control",
+                        "ambiguous motion intent",
+                        "parser-confidence fallback",
+                    ],
+                )
+
+            print_section("EXECUTION PLAN", plan.model_dump())
+            emit_audit_event(
+                session_id=task.session_id,
+                event_type="plan_generated",
+                action_summary=plan.summary,
+            )
+
+            print_section("RISK ASSESSMENT", risk.model_dump())
+            emit_audit_event(
+                session_id=task.session_id,
+                event_type="risk_assessed",
+                action_summary=f"Risk level: {str(risk.risk_level)}",
+                rationale="; ".join(risk.reasons),
+            )
+
+            policy_decision: PolicyDecision = evaluate_plan(task, plan, risk, state)
+            print_section("POLICY DECISION", policy_decision.model_dump())
+
+            emit_audit_event(
+                session_id=task.session_id,
+                event_type="policy_evaluated",
+                action_summary="Policy decision completed.",
+                decision=policy_decision.model_dump(mode="json")["decision"],
+                rationale="; ".join(policy_decision.reasons),
+            )
+
+            if policy_decision.decision == PolicyDecisionType.DENY:
+                if serial_link is not None and risk.risk_level == RiskLevel.CRITICAL:
+                    serial_link.send_command("SET_STATE FAULT")
+                    serial_link.send_command("BUZZER ALERT")
+
+                emit_audit_event(
+                    session_id=task.session_id,
+                    event_type="execution_denied",
+                    action_summary="Execution denied by policy.",
+                    decision="deny",
+                    rationale="; ".join(policy_decision.reasons),
+                )
+                print("Execution denied by policy.")
+
+                if serial_link is not None:
+                    final_status = request_fresh_status(serial_link)
+                    print_section("ARDUINO STATUS AFTER", {"status": final_status})
+                return
+
+            else:
+                print("Execution halted because the machine-control request was ambiguous.")
+                if serial_link is not None:
+                    final_status = request_fresh_status(serial_link)
+                    print_section("ARDUINO STATUS AFTER", {"status": final_status})
+                return
+
         if machine_plan is not None:
             plan = machine_plan
         elif settings.use_mock_llm:
@@ -569,7 +722,7 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
         emit_audit_event(
             session_id=task.session_id,
             event_type="risk_assessed",
-            action_summary=f"Risk level: {risk.risk_level.value}",
+            action_summary=f"Risk level: {str(risk.risk_level)}",
             rationale="; ".join(risk.reasons),
         )
 
@@ -587,6 +740,11 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
         if policy_decision.decision == PolicyDecisionType.ALLOW:
             execution_bundle = build_machine_execution_bundle(task, plan, policy_decision, state)
             print_section("EXECUTION BUNDLE", execution_bundle.model_dump())
+            if not execution_bundle.actions:
+                print(
+                    "No machine actions were generated. "
+                    "This usually means the request was not recognized as a valid bounded machine intent."
+                )
 
             executor = MachineExecutor()
             state_after_execution = executor.execute_bundle(
@@ -662,6 +820,11 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
                     if policy_decision_after_approval.decision == PolicyDecisionType.ALLOW:
                         execution_bundle = build_machine_execution_bundle(task, plan, policy_decision_after_approval, state)
                         print_section("EXECUTION BUNDLE", execution_bundle.model_dump())
+                        if not execution_bundle.actions:
+                            print(
+                                "No machine actions were generated. "
+                                "This usually means the request was not recognized as a valid bounded machine intent."
+                            )
 
                         executor = MachineExecutor()
                         state_after_execution = executor.execute_bundle(
