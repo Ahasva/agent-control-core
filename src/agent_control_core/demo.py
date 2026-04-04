@@ -312,13 +312,50 @@ def live_generate_plan(task: TaskRequest, settings: Settings) -> ExecutionPlan:
         f"Requested tools:\n{', '.join(task.requested_tools) if task.requested_tools else 'None'}\n\n"
         "Generate a structured execution plan."
     )
-    return call_structured_model(
+
+    plan = call_structured_model(
         settings=settings,
         model=settings.planner_model,
         system_prompt=system_prompt,
         user_input=user_input,
         response_model=ExecutionPlan,
     )
+
+    normalized_steps: list[PlanStep] = []
+
+    safe_shutdown_phrases = [
+        "safe shutdown",
+        "shut the machine down safely",
+        "shut it off safely",
+        "shutdown safely",
+        "disable the machine",
+        "return the machine to off",
+        "return to a safe state",
+        "return to safe state",
+        "final safe state",
+        "stopped or safe state",
+        "return actuator to neutral",
+        "return to neutral position",
+        "clear the fault",
+        "fault recovery",
+        "unlock",
+        "clear the machine lock",
+    ]
+
+    for step in plan.steps:
+        description_lower = (step.description or "").lower()
+
+        safe_shutdown_like = any(
+            phrase in description_lower
+            for phrase in safe_shutdown_phrases
+        )
+
+        if safe_shutdown_like:
+            step = step.model_copy(update={"destructive_action": False})
+
+        normalized_steps.append(step)
+
+    return plan.model_copy(update={"steps": normalized_steps})
 
 
 def live_assess_risk(

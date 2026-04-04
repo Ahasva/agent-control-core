@@ -226,8 +226,10 @@ def parse_status_line(status_line: str) -> dict[str, str]:
 
 
 def read_latest_status(serial_link, attempts: int = 12) -> str | None:
-    for _ in range(attempts):
+    for i in range(attempts):
         line = serial_link.read_line()
+        print(f"DEBUG SERIAL [{i}]: {line!r}")  # temporary
+
         if not line:
             continue
         if line.startswith("READY "):
@@ -248,6 +250,7 @@ def request_fresh_status(serial_link) -> str | None:
         serial_link._connection.reset_input_buffer()
 
     serial_link.send_command("READ_STATUS")
+    time.sleep(0.05)
     return read_latest_status(serial_link)
 
 
