@@ -57,6 +57,7 @@ def evaluate_plan(
     intent_type = parsed.intent_type if parsed is not None else None
 
     fault_allowed_intents = {"recover_fault", "safe_shutdown"}
+    lock_allowed_intents = {"unlock_machine", "safe_shutdown"}
 
     # -------------------------------------------------------------------------
     # HARD DENY RULES
@@ -89,11 +90,11 @@ def evaluate_plan(
             required_approvals=[],
         )
 
-    if state_is_locked(state):
+    if state_is_locked(state) and intent_type not in lock_allowed_intents:
         return PolicyDecision(
             decision=PolicyDecisionType.DENY,
             reasons=[
-                "Machine is locked and requires reset or acknowledgement before proceeding."
+                "Machine is locked and requires explicit unlock or safe shutdown before proceeding."
             ],
             required_approvals=[],
         )
@@ -126,7 +127,7 @@ def evaluate_plan(
         )
 
     # -------------------------------------------------------------------------
-    # FAULT-STATE RECOVERY / SHUTDOWN CARVE-OUT
+    # FAULT / LOCK RECOVERY OR SAFE-SHUTDOWN CARVE-OUTS
     # -------------------------------------------------------------------------
 
     if state_is_faulted(state) and intent_type in fault_allowed_intents:
@@ -134,6 +135,15 @@ def evaluate_plan(
             decision=PolicyDecisionType.ALLOW,
             reasons=[
                 "Fault-state recovery or safe shutdown is explicitly permitted."
+            ],
+            required_approvals=[],
+        )
+
+    if state_is_locked(state) and intent_type in lock_allowed_intents:
+        return PolicyDecision(
+            decision=PolicyDecisionType.ALLOW,
+            reasons=[
+                "Lock-state recovery or safe shutdown is explicitly permitted."
             ],
             required_approvals=[],
         )
@@ -160,7 +170,9 @@ def evaluate_plan(
 
     if risk.risk_level == RiskLevel.HIGH:
         if state.approval_granted:
-            reasons.append("High-risk action was approved by an operator through the machine approval channel.")
+            reasons.append(
+                "High-risk action was approved by an operator through the machine approval channel."
+            )
         else:
             reasons.append("Risk level assessed as high.")
             required_approvals.append("high_risk_review")

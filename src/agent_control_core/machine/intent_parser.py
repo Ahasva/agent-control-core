@@ -144,6 +144,8 @@ def parse_machine_intent(text: str, current_angle: int | None = None) -> ParsedM
         for phrase in [
             "startup sequence",
             "start up sequence",
+            "startup",
+            "start up",
             "startup machine",
             "start machine sequence",
             "prepare and start machine",
@@ -159,12 +161,29 @@ def parse_machine_intent(text: str, current_angle: int | None = None) -> ParsedM
         for phrase in [
             "safe shutdown",
             "shutdown safely",
+            "shut down safely",
+            "controlled shutdown",
             "stop and safe the machine",
             "safe the machine",
         ]
     ):
         return ParsedMachineIntent(
             intent_type="safe_shutdown",
+            bypass_signal=bypass_signal,
+        )
+
+    if any(
+        phrase in lowered
+        for phrase in [
+            "unlock machine",
+            "unlock the machine",
+            "clear lock",
+            "recover from lock",
+            "reset lock",
+        ]
+    ):
+        return ParsedMachineIntent(
+            intent_type="unlock_machine",
             bypass_signal=bypass_signal,
         )
 
@@ -265,4 +284,46 @@ def parse_machine_intent(text: str, current_angle: int | None = None) -> ParsedM
             bypass_signal=bypass_signal,
         )
 
+    if any(
+        phrase in lowered
+        for phrase in [
+            "lock machine",
+            "lock the machine",
+            "engage lock",
+            "activate lock",
+        ]
+    ):
+        return ParsedMachineIntent(
+            intent_type="lock_machine",
+            bypass_signal=bypass_signal,
+        )
+    
+    if any(
+        phrase in lowered
+        for phrase in [
+            "safe shutdown",
+            "shutdown safely",
+            "shut down safely",
+            "controlled shutdown",
+        ]
+    ):
+        return ParsedMachineIntent(
+            intent_type="safe_shutdown",
+            bypass_signal=bypass_signal,
+        )
+
+    if any(
+        phrase in lowered
+        for phrase in [
+            "startup sequence",
+            "start up sequence",
+            "startup",
+            "start up",
+        ]
+    ):
+        return ParsedMachineIntent(
+            intent_type="startup_sequence",
+            bypass_signal=bypass_signal,
+        )
+    
     return None

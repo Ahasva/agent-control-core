@@ -276,7 +276,7 @@ def build_machine_intent_plan(user_text: str, state: SystemState) -> ExecutionPl
                 ),
             ],
         )
-    
+
     if parsed.intent_type == "startup_sequence":
         return ExecutionPlan(
             summary="Run a guarded startup sequence to bring the machine from OFF/IDLE to ACTIVE.",
@@ -368,6 +368,124 @@ def build_machine_intent_plan(user_text: str, state: SystemState) -> ExecutionPl
             ],
         )
 
+    if parsed.intent_type == "unlock_machine":
+        return ExecutionPlan(
+            summary="Recover the machine from LOCKED and return it to a safe baseline state.",
+            steps=[
+                PlanStep(
+                    step_id="step-1",
+                    description="Inspect current machine state.",
+                    tool_name="state_reader",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+                PlanStep(
+                    step_id="step-2",
+                    description="Clear the machine lock and return to a safe baseline state.",
+                    tool_name="machine_controller",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+            ],
+        )
+
+    if parsed.intent_type == "lock_machine":
+        return ExecutionPlan(
+            summary="Place the machine into LOCKED state.",
+            steps=[
+                PlanStep(
+                    step_id="step-1",
+                    description="Inspect current machine state.",
+                    tool_name="state_reader",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+                PlanStep(
+                    step_id="step-2",
+                    description="Transition the machine into LOCKED state.",
+                    tool_name="machine_controller",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+            ],
+        )
+
+    if parsed.intent_type == "safe_shutdown":
+        return ExecutionPlan(
+            summary="Run a safe shutdown sequence and return the machine to OFF.",
+            steps=[
+                PlanStep(
+                    step_id="step-1",
+                    description="Inspect current machine state.",
+                    tool_name="state_reader",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+                PlanStep(
+                    step_id="step-2",
+                    description="Move to a safe neutral position if needed and disable the machine.",
+                    tool_name="machine_controller",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+            ],
+        )
+
+    if parsed.intent_type == "startup_sequence":
+        return ExecutionPlan(
+            summary="Run a guarded startup sequence to bring the machine from OFF/IDLE to ACTIVE.",
+            steps=[
+                PlanStep(
+                    step_id="step-1",
+                    description="Inspect current machine state.",
+                    tool_name="state_reader",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+                PlanStep(
+                    step_id="step-2",
+                    description="Enable the machine and bring it to READY state if needed.",
+                    tool_name="machine_controller",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+                PlanStep(
+                    step_id="step-3",
+                    description="Start ACTIVE mode under bounded machine rules.",
+                    tool_name="machine_controller",
+                    requires_network=False,
+                    touches_money=False,
+                    touches_credentials=False,
+                    touches_external_comms=False,
+                    destructive_action=False,
+                ),
+            ],
+        )
+
     return None
 
 
@@ -402,6 +520,34 @@ def build_machine_intent_risk(user_text: str, state: SystemState) -> RiskAssessm
             risk_level=RiskLevel.HIGH,
             reasons=["Calibration changes machine behavior and requires approval before execution."],
             sensitive_capabilities=["calibration motion", "approval-gated machine procedure"],
+        )
+    
+    if parsed.intent_type == "unlock_machine":
+        return RiskAssessment(
+            risk_level=RiskLevel.MEDIUM,
+            reasons=["Lock recovery changes safety-relevant machine state and must remain bounded."],
+            sensitive_capabilities=["lock recovery", "machine state recovery"],
+        )
+
+    if parsed.intent_type == "lock_machine":
+        return RiskAssessment(
+            risk_level=RiskLevel.LOW,
+            reasons=["The request places the machine into a more restrictive safety state."],
+            sensitive_capabilities=["machine lock control"],
+        )
+
+    if parsed.intent_type == "safe_shutdown":
+        return RiskAssessment(
+            risk_level=RiskLevel.MEDIUM,
+            reasons=["Safe shutdown changes machine activity state under bounded shutdown rules."],
+            sensitive_capabilities=["machine shutdown control"],
+        )
+
+    if parsed.intent_type == "startup_sequence":
+        return RiskAssessment(
+            risk_level=RiskLevel.MEDIUM,
+            reasons=["The request prepares or starts bounded machine activity."],
+            sensitive_capabilities=["machine startup control"],
         )
 
     reasons = ["The request affects physical actuator motion."]
