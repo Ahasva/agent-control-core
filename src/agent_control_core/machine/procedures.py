@@ -364,10 +364,7 @@ def build_machine_execution_bundle(
     # -------------------------------------------------------------------------
     movement_relevant = (
         "test movement" in text
-        or "safe test" in text
-        or "movement" in text
-        or "move" in text
-        or any(step.destructive_action for step in plan.steps)
+        or "safe test movement" in text
     )
 
     if movement_relevant and working_state.requested_angle is not None:
