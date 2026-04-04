@@ -594,6 +594,14 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
                 state,
                 serial_link=serial_link,
             )
+
+            if serial_link is not None:
+                final_status = request_fresh_status(serial_link)
+                state_after_execution = merge_hardware_status_into_state(
+                    state_after_execution,
+                    final_status,
+                )
+
             print_section("STATE AFTER EXECUTION", state_after_execution.model_dump())
 
             emit_audit_event(
@@ -653,6 +661,14 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
                             state,
                             serial_link=serial_link,
                         )
+
+                        if serial_link is not None:
+                            final_status = request_fresh_status(serial_link)
+                            state_after_execution = merge_hardware_status_into_state(
+                                state_after_execution,
+                                final_status,
+                            )
+
                         print_section("STATE AFTER EXECUTION", state_after_execution.model_dump())
 
                         emit_audit_event(
