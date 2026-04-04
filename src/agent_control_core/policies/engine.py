@@ -6,6 +6,7 @@ The POLICY LOGIC uses the decision from the DECISION LOGIC (FACTS) and decides (
 "allow" or "require approval" or "deny".
 """
 
+from agent_control_core.machine.intent_parser import parse_machine_intent
 from agent_control_core.policies.rules import (
     plan_is_destructive,
     plan_touches_credentials,
@@ -49,6 +50,14 @@ def evaluate_plan(
     touches_external_comms = plan_touches_external_comms(plan)
     is_destructive = plan_is_destructive(plan)
 
+    parsed = parse_machine_intent(
+        f"{task.goal} {task.context or ''}",
+        current_angle=state.servo_angle,
+    )
+    intent_type = parsed.intent_type if parsed is not None else None
+
+    fault_allowed_intents = {"recover_fault", "safe_shutdown"}
+
     # -------------------------------------------------------------------------
     # HARD DENY RULES
     # -------------------------------------------------------------------------
@@ -71,7 +80,7 @@ def evaluate_plan(
             required_approvals=[],
         )
 
-    if state_is_faulted(state):
+    if state_is_faulted(state) and intent_type not in fault_allowed_intents:
         return PolicyDecision(
             decision=PolicyDecisionType.DENY,
             reasons=[
@@ -117,6 +126,19 @@ def evaluate_plan(
         )
 
     # -------------------------------------------------------------------------
+    # FAULT-STATE RECOVERY / SHUTDOWN CARVE-OUT
+    # -------------------------------------------------------------------------
+
+    if state_is_faulted(state) and intent_type in fault_allowed_intents:
+        return PolicyDecision(
+            decision=PolicyDecisionType.ALLOW,
+            reasons=[
+                "Fault-state recovery or safe shutdown is explicitly permitted."
+            ],
+            required_approvals=[],
+        )
+
+    # -------------------------------------------------------------------------
     # APPROVAL-REQUIRED RULES
     # -------------------------------------------------------------------------
 
@@ -154,11 +176,6 @@ def evaluate_plan(
     if state_requires_approval(state):
         reasons.append("Machine state indicates that approval is currently required.")
         required_approvals.append("machine_state_approval")
-
-    # MEDIUM risk does not automatically require approval.
-    # LOW risk does not automatically require approval.
-    # HIGH risk does.
-    # CRITICAL risk is already denied above.
 
     if required_approvals:
         return PolicyDecision(
