@@ -177,7 +177,9 @@ def parse_machine_intent(text: str, current_angle: int | None = None) -> ParsedM
         for phrase in [
             "unlock machine",
             "unlock the machine",
+            "unlock the lock",
             "clear lock",
+            "clear the lock",
             "recover from lock",
             "reset lock",
         ]
@@ -297,33 +299,5 @@ def parse_machine_intent(text: str, current_angle: int | None = None) -> ParsedM
             intent_type="lock_machine",
             bypass_signal=bypass_signal,
         )
-    
-    if any(
-        phrase in lowered
-        for phrase in [
-            "safe shutdown",
-            "shutdown safely",
-            "shut down safely",
-            "controlled shutdown",
-        ]
-    ):
-        return ParsedMachineIntent(
-            intent_type="safe_shutdown",
-            bypass_signal=bypass_signal,
-        )
 
-    if any(
-        phrase in lowered
-        for phrase in [
-            "startup sequence",
-            "start up sequence",
-            "startup",
-            "start up",
-        ]
-    ):
-        return ParsedMachineIntent(
-            intent_type="startup_sequence",
-            bypass_signal=bypass_signal,
-        )
-    
     return None
