@@ -192,7 +192,7 @@ def evaluate_plan(
         reasons.append("Task targets production-affecting configuration change.")
         required_approvals.append("production_change_review")
 
-    if state_requires_approval(state):
+    if state_requires_approval(state) and intent_type != "safe_shutdown":
         reasons.append("Machine state indicates that approval is currently required.")
         required_approvals.append("machine_state_approval")
 

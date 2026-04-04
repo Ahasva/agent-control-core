@@ -253,6 +253,14 @@ def build_machine_execution_bundle(
             return ExecutionBundle(actions=actions)
 
         if parsed.intent_type == "safe_shutdown":
+            if (
+                not working_state.machine_enabled
+                and working_state.machine_mode == MachineMode.OFF
+                and not working_state.fault_active
+                and not working_state.lock_active
+            ):
+                return ExecutionBundle(actions=actions)
+
             move_servo_to_neutral_if_possible("Return actuator to neutral position before safe shutdown.")
 
             append_action(
