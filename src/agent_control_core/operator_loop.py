@@ -603,6 +603,13 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
                     final_status,
                 )
 
+            state_after_execution = state_after_execution.model_copy(
+                update={
+                    "approval_pending": False,
+                    "approval_granted": False,
+                }
+            )
+
             print_section("STATE AFTER EXECUTION", state_after_execution.model_dump())
 
             emit_audit_event(
@@ -663,6 +670,7 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
                             serial_link=serial_link,
                         )
 
+
                         if serial_link is not None:
                             final_status = request_fresh_status(serial_link)
                             print_section("ARDUINO STATUS AFTER EXECUTION", {"status": final_status})
@@ -670,6 +678,13 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
                                 state_after_execution,
                                 final_status,
                             )
+
+                        state_after_execution = state_after_execution.model_copy(
+                            update={
+                                "approval_pending": False,
+                                "approval_granted": False,
+                            }
+                        )
 
                         print_section("STATE AFTER EXECUTION", state_after_execution.model_dump())
 
