@@ -32,7 +32,6 @@ from agent_control_core.settings import Settings
 from agent_control_core.workflows.checkpoints import build_approval_request
 
 
-
 def build_interactive_task(user_text: str) -> TaskRequest:
     return TaskRequest(
         user_id="interactive_user",
@@ -696,6 +695,16 @@ def run_operator_once(user_text: str, settings: Settings) -> None:
 
 def main() -> None:
     settings = Settings()
+
+    print_section(
+        "SERIAL CONFIG",
+        {
+            "enabled": settings.serial_enabled,
+            "port": settings.serial_port,
+            "baudrate": settings.serial_baudrate,
+            "timeout": settings.serial_timeout,
+        },
+    )
 
     print(f"Using mock LLM mode: {settings.use_mock_llm}")
     print("Interactive operator loop started.")
