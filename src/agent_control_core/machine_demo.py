@@ -278,7 +278,6 @@ def wait_for_hardware_approval(
     serial_link,
     timeout_seconds: float = 30.0,
 ) -> tuple[bool, str | None]:
-    import time
 
     deadline = time.time() + timeout_seconds
 

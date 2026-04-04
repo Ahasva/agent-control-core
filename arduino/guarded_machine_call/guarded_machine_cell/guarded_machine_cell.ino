@@ -146,14 +146,16 @@ void handleDisableMachine() {
 void handleSetState(const String& stateName) {
   machineState = stateName;
 
-  // Clear latched flags first unless the new state explicitly sets them
-  faultActive = false;
-  lockActive = false;
-
+  // Preserve existing latches unless the new state explicitly changes them.
   if (stateName == "FAULT") {
     faultActive = true;
+    // keep lockActive as-is
   } else if (stateName == "LOCKED") {
     lockActive = true;
+    // keep faultActive as-is
+  } else if (stateName == "OFF") {
+    faultActive = false;
+    lockActive = false;
   }
 
   updateStateIndicators();
@@ -169,11 +171,15 @@ void handleMoveServo(int angle) {
 
 void handleClearFault() {
   faultActive = false;
-  if (machineEnabled) {
+
+  if (lockActive) {
+    machineState = "LOCKED";
+  } else if (machineEnabled) {
     machineState = "IDLE";
   } else {
     machineState = "OFF";
   }
+
   updateStateIndicators();
   sendAck("CLEAR_FAULT");
 }

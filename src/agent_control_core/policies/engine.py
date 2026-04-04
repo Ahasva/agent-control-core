@@ -81,7 +81,7 @@ def evaluate_plan(
             required_approvals=[],
         )
 
-    if state_is_faulted(state) and intent_type not in fault_allowed_intents:
+    if state_is_faulted(state) and intent_type not in fault_allowed_intents | {"unlock_machine"}:
         return PolicyDecision(
             decision=PolicyDecisionType.DENY,
             reasons=[
@@ -139,11 +139,20 @@ def evaluate_plan(
             required_approvals=[],
         )
 
-    if state_is_locked(state) and intent_type in lock_allowed_intents:
+    if state_is_locked(state) and intent_type == "unlock_machine":
         return PolicyDecision(
             decision=PolicyDecisionType.ALLOW,
             reasons=[
-                "Lock-state recovery or safe shutdown is explicitly permitted."
+                "Lock-state recovery is explicitly permitted."
+            ],
+            required_approvals=[],
+        )
+
+    if state_is_locked(state) and intent_type == "safe_shutdown":
+        return PolicyDecision(
+            decision=PolicyDecisionType.ALLOW,
+            reasons=[
+                "Safe shutdown from locked state is explicitly permitted."
             ],
             required_approvals=[],
         )
