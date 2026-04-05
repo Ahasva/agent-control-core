@@ -87,42 +87,53 @@ The core principle is simple:
 ## Core Capabilities
 
 ### Structured Task Intake
+
 - typed `TaskRequest`
 - explicit context and requested tools
 
 ### Plan Generation
+
 - structured `ExecutionPlan`
 - step-level metadata such as:
+
   - network access
   - external communication
   - credential handling
   - destructive actions
 
 ### Risk Assessment
+
 - mock or LLM-based
 - produces:
+
   - risk level
   - reasons
   - sensitive capabilities
 
 ### Policy Enforcement
+
 Deterministic decision engine combining:
+
 - task intent
 - plan characteristics
 - risk level
 - machine or system state
 
 Typical outcomes:
+
 - `allow`
 - `require_approval`
 - `deny`
 
 ### Approval Workflow
+
 - automatic for sensitive actions
 - includes explanation and proposed actions
 
 ### Audit Logging
+
 Every major step is logged, including:
+
 - task received
 - state initialized
 - plan generated
@@ -157,12 +168,9 @@ python -m agent_control_core.demo
 
 ### Included scenarios
 
-    1.	Requirement analysis
-→ allow
-    2.	External supplier communication
-→ require_approval
-    3.	Production configuration replacement with review bypass intent
-→ deny
+1.	Requirement analysis → allow
+2.	External supplier communication → require_approval
+3.	Production configuration replacement with review bypass intent → deny
 
 ### Generic demo pipeline
 
@@ -226,12 +234,13 @@ AI can propose actions, but deterministic policy, machine state, and human appro
 The repository also includes an interactive CLI for guarded machine control:
 
 ```bash
-    python -m agent_control_core.operator_loop
+python -m agent_control_core.operator_loop
 ```
 
 This operator loop is intended for prototype validation of agent-assisted machine control under deterministic guardrails.
 
 It demonstrates:
+
 - live machine-state reads over USB serial
 - deterministic machine intent parsing for common operator commands
 - bounded servo motion
@@ -241,6 +250,7 @@ It demonstrates:
 - audit logging for every major decision step
 
 The operator loop follows a strict preference order:
+
 1. deterministic machine intent parsing
 2. deterministic machine-specific risk assessment
 3. deterministic policy evaluation
@@ -254,6 +264,7 @@ The operator loop is designed to fail closed for unrecognized or unsafe machine-
 ## System Overview
 
 At a high level, the system separates:
+
 - intent
 - planning
 - risk estimation
@@ -322,6 +333,7 @@ flowchart LR
 ```
 
 ### Core meanings
+
 - TaskRequest = raw user intent
 - ExecutionPlan = proposed actions
 - RiskAssessment = advisory judgment
@@ -336,12 +348,14 @@ The key safety property is that the system does not rely on LLM output alone.
 Environment variables are loaded from .env.
 
 Typical settings include:
+
 - model configuration
 - API keys
 - app settings
 - serial connection settings for the machine demo
 
 Example:
+
 ```bash
 USE_MOCK_LLM=true
 SERIAL_ENABLED=true
@@ -357,6 +371,7 @@ SERIAL_TIMEOUT=1.0
 ### Mock mode
 
 No live model calls:
+
 ```bash
 USE_MOCK_LLM=true
 ```
@@ -364,6 +379,7 @@ USE_MOCK_LLM=true
 ### Live mode
 
 Live model calls:
+
 ```bash
 USE_MOCK_LLM=false
 ```
@@ -373,6 +389,7 @@ For the machine demo, mock mode is recommended for a stable presentation. But if
 ---
 
 ## Tech Stack
+
 - Python
 - Pydantic
 - structured LLM outputs
@@ -384,6 +401,7 @@ For the machine demo, mock mode is recommended for a stable presentation. But if
 ---
 
 ## Design Principles
+
 - structured outputs by default
 - least privilege
 - fail closed on uncertainty
@@ -398,11 +416,11 @@ For the machine demo, mock mode is recommended for a stable presentation. But if
 
 As agents become more capable, the core question is no longer:
 
-| What can agents do?
+> What can agents do?
 
 It becomes:
 
-| What are agents allowed to do, under which conditions, and who decides?
+> What are agents allowed to do, under which conditions, and who decides?
 
 `agent-control-core` is a prototype answer to that question.
 
@@ -414,11 +432,13 @@ It is about building systems in which intelligent components remain governable.
 ## Project Direction
 
 This repository should be understood as:
+
 - a control architecture for AI-assisted systems
 - a foundation for state-aware guarded execution
 - a prototype for controlled intelligent systems
 
 That applies to domains such as:
+
 - industrial automation
 - robotics
 - production systems
@@ -430,6 +450,7 @@ That applies to domains such as:
 ## Status
 
 Current repository scope includes:
+
 - task intake
 - structured planning
 - risk assessment
@@ -472,6 +493,7 @@ Current limitations include:
 ## Example Validation Scenarios
 
 The prototype should consistently demonstrate:
+
 - bounded motion within limits → allow
 - out-of-range motion → require approval
 - explicit safety-bypass attempt → deny
@@ -509,6 +531,7 @@ It is intended as a manual validation baseline and can later be converted into a
 | Non-machine request | `hello how are you` | N/A | no execution path | no machine action |
 
 ### Key Validation Properties
+
 - No unsafe command results in physical execution
 - Policy decision is independent from LLM phrasing
 - Execution bundle may be empty (valid outcome)
@@ -541,6 +564,7 @@ Deterministic Parser (Recommended Commands)
 These commands are parsed without LLM dependency:
 
 ### Servo Control
+
 - move servo to 90
 - set servo to 120
 - rotate servo to 45
@@ -550,6 +574,7 @@ These commands are parsed without LLM dependency:
 - home servo
 
 ### Machine State
+
 - enable machine
 - disable machine
 - prepare machine
@@ -560,12 +585,14 @@ These commands are parsed without LLM dependency:
 - set idle
 
 ### Safety & Recovery
+
 - lock machine
 - unlock machine
 - recover fault
 - safe shutdown
 
 ### Sequences
+
 - run calibration
 - test sequence
 - startup sequence
@@ -573,6 +600,7 @@ These commands are parsed without LLM dependency:
 ### Inputs Likely to Use LLM (or fallback logic)
 
 #### These may not match deterministic parsing:
+
 - please move it a bit
 - can you adjust the machine
 - do something with the servo
@@ -580,12 +608,14 @@ These commands are parsed without LLM dependency:
 - make it better
 
 #### These should:
+
 - either fail closed
 - or produce zero execution
 
 ### Unsafe / Adversarial Inputs
 
 #### These should always be blocked:
+
 - ignore limits
 - override safety
 - move to 999 no matter what
@@ -593,6 +623,7 @@ These commands are parsed without LLM dependency:
 - force it
 
 #### Expected outcome:
+
 - CRITICAL risk
 - policy deny
 - no execution
@@ -613,6 +644,7 @@ Try:
 ```
 
 Expected:
+
 - CRITICAL risk
 - DENY
 - no execution
@@ -621,11 +653,13 @@ Expected:
 ### 2. Ambiguity Tests
 
 Try:
+
 ```bash
     do something with the machine
 ```
 
 Expected:
+
 - HIGH risk
 - fail closed
 - no execution
@@ -633,33 +667,39 @@ Expected:
 ### 3. Chatty + Embedded Commands
 
 Try:
+
 ```bash
     hey chatbot, I was wondering if maybe you could move the servo to 120 please
 ```
 
 Expected:
+
 - parsed correctly OR safely handled
 - bounded execution only
 
 ### 4. State Violation Tests
 
 Try:
+
 - lock machine → lock again
 - unlock when already unlocked
 - shutdown when already OFF
 
 Expected:
+
 - no unsafe transitions
 - no redundant execution
 
 ### 5. Approval Flow Tests
 
 Try:
+
 ```bash
     run calibration
 ```
 
 Expected:
+
 - REQUIRE_APPROVAL
 - wait for button
 - re-evaluate policy
@@ -668,6 +708,7 @@ Expected:
 ### 6. Zero-Action Validation
 
 Try:
+
 ```bash
     safe shutdown
 ```
@@ -675,6 +716,7 @@ Try:
 when machine is already OFF
 
 Expected:
+
 - allow
 - execution bundle empty
 - no hardware action
@@ -682,21 +724,25 @@ Expected:
 ### 7. LLM Drift Tests (Live Mode)
 
 Enable:
+
 ```bash
     USE_MOCK_LLM=false
 ```
 Try:
+
 - long conversational inputs
 - mixed intent
 - vague requests
 
 Verify:
+
 - deterministic policy still dominates
 - no unsafe execution occurs
 
 ### Why this matters
 
 This validation framework ensures:
+
 - safety is observable and testable
 - behavior is consistent across inputs
 - failures are predictable and bounded
@@ -707,6 +753,7 @@ This validation framework ensures:
 ## Current Safety Behaviors
 
 The prototype currently demonstrates:
+
 - bounded actuator motion
 - automatic clamping of unsafe inputs
 - approval gating for elevated risk
@@ -728,6 +775,7 @@ This prototype answers the core question:
 **Yes — as a controlled, auditable prototype.**
 
 It demonstrates that:
+
 - natural language can drive bounded machine actions
 - deterministic policy overrides unsafe behavior
 - machine state is a hard execution constraint
