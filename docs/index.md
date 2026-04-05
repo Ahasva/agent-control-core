@@ -10,6 +10,7 @@ This site contains the project whitepaper and technical documentation.
 - [Architecture](architecture.md)
 - [Design Principles](design-principles.md)
 - [Threat Model](threat-model.md)
+- [README](repository-readme.md)
 
 ## Repository
 

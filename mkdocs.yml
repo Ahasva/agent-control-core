@@ -17,6 +17,7 @@ nav:
   - Architecture: architecture.md
   - Design Principles: design-principles.md
   - Threat Model: threat-model.md
+  - README: repository-readme.md
 
 markdown_extensions:
   - admonition
