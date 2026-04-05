@@ -489,8 +489,6 @@ The following matrix defines expected system behavior across representative oper
 
 It is intended as a manual validation baseline and can later be converted into automated tests.
 
-## Validation Matrix
-
 | Scenario | Example Input | Expected Risk | Expected Policy | Expected Execution |
 |----------|-------------|--------------|----------------|------------------|
 | Safe bounded move | `move servo to 90` | LOW | allow | servo moves |
@@ -515,6 +513,22 @@ It is intended as a manual validation baseline and can later be converted into a
 - Policy decision is independent from LLM phrasing
 - Execution bundle may be empty (valid outcome)
 - System must fail closed on ambiguity
+
+### Validation Guarantee
+
+The system behavior described above is validated through automated tests covering:
+
+- deterministic intent parsing  
+- risk classification (including safety-bypass detection)  
+- policy decisions across machine states  
+- execution bundle generation (including zero-action outcomes)  
+
+A dedicated fail-closed test ensures that:
+
+- ambiguous + machine-like + safety-bypass inputs  
+- never result in executable machine actions  
+
+This guarantees that uncertainty or adversarial phrasing cannot lead to unsafe physical execution.
 
 ---
 
@@ -556,8 +570,6 @@ These commands are parsed without LLM dependency:
 - test sequence
 - startup sequence
 
----
-
 ### Inputs Likely to Use LLM (or fallback logic)
 
 #### These may not match deterministic parsing:
@@ -570,8 +582,6 @@ These commands are parsed without LLM dependency:
 #### These should:
 - either fail closed
 - or produce zero execution
-
----
 
 ### Unsafe / Adversarial Inputs
 
@@ -725,3 +735,5 @@ It demonstrates that:
 - unsafe or ambiguous requests fail safely
 - execution can be separated from model suggestion
 - physical actuation remains auditable and controlled
+
+These behaviors are not only demonstrated manually but are also enforced through automated validation tests, ensuring consistent and reproducible safety guarantees.
