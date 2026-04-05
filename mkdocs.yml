@@ -1,0 +1,28 @@
+site_name: Agent Control Core
+site_description: Controlled, policy-aware execution for AI-assisted systems
+site_author: André Zempelburg
+
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Whitepaper: whitepaper.md
+  - Architecture: architecture.md
+  - Design Principles: design-principles.md
+  - Threat Model: threat-model.md
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+    
+plugins:
+  - search
+  - mermaid2

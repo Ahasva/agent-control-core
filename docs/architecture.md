@@ -2,79 +2,307 @@
 
 ## Overview
 
-Agent Control Core is built as a layered control pipeline:
+Agent Control Core implements a **deterministic control architecture** for AI-assisted systems.
 
-TaskRequest → ExecutionPlan → RiskAssessment → PolicyDecision → AuditEvent
+It enforces a strict execution pipeline:
 
-Each stage has a distinct responsibility.
+**TaskRequest → ExecutionPlan → RiskAssessment → PolicyDecision → Execution → Audit**
 
-Layers
+This pipeline ensures that **no action reaches execution without passing structured validation, risk evaluation, and policy enforcement**.
 
-1. TaskRequest
+---
 
-Represents the raw user request.
-	•	defined in: src/agent_control_core/schemas/tasks.py
-	•	created in: src/agent_control_core/demo.py
+## High-Level Control Flow
 
-This layer is treated as untrusted intent.
+```mermaid
+flowchart LR
+    U[User / Operator] --> T[TaskRequest]
+    T --> P[ExecutionPlan]
+    P --> R[RiskAssessment]
+    R --> D[PolicyDecision]
 
-⸻
+    D -->|allow| X[ExecutionLayer]
+    D -->|require approval| A[ApprovalWorkflow]
+    D -->|deny| B[Blocked]
 
-2. ExecutionPlan
+    A --> D2[Re-evaluate Policy]
+    D2 --> X
 
-Represents the structured plan proposed by the agent.
-	•	defined in: src/agent_control_core/schemas/plans.py
-	•	created by:
-	•	mock_generate_plan() in demo.py
-	•	live_generate_plan() in demo.py
-	•	call_structured_model() in llm/structured.py
+    X --> M[Machine / Tool]
+    X --> L[Audit Log]
 
-This layer is treated as a proposal, not an authorization.
+    B --> L
+```
 
-⸻
+---
 
-3. RiskAssessment
+## Core Principle
 
-Represents the structured risk estimate for the plan.
-	•	defined in: src/agent_control_core/schemas/policies.py
-	•	created by:
-	•	mock_assess_risk() in demo.py
-	•	live_assess_risk() in demo.py
-	•	call_structured_model() in llm/structured.py
+> The LLM may propose actions — but it never decides execution.
 
-This layer is treated as advisory model judgment.
+The system separates:
 
-⸻
+- intent (user / LLM)
+- judgment (risk)
+- authority (policy)
+- execution (controlled layer)
 
-4. PolicyDecision
+---
 
-Represents the final deterministic decision.
-	•	defined in: src/agent_control_core/schemas/policies.py
-	•	created by: evaluate_plan() in src/agent_control_core/policies/engine.py
+## Layered Architecture
+
+### 1. TaskRequest — Untrusted Intent
+
+Represents raw user input:
+
+- defined in: `schemas/tasks.py`
+- created in: `demo.py`, `operator_loop.py`
+
+```mermaid
+flowchart TD
+    U[User Input] --> T[TaskRequest]
+    T --> N[Raw intent / not trusted]
+```
+This layer is always treated as untrusted input.
+
+### 2. ExecutionPlan — Proposed Actions
+
+Structured plan describing intended steps:
+
+- defined in: schemas/plans.py
+- created by:
+- mock_generate_plan()
+- live_generate_plan()
+- deterministic parsing (machine demo)
+
+```mermaid
+flowchart TD
+    T[TaskRequest] --> P[ExecutionPlan]
+    P --> N[Proposal only / not yet allowed]
+```
+
+Includes metadata such as:
+
+- destructive actions
+- external communication
+- credential access
+
+### 3. RiskAssessment — Advisory Judgment
+
+Evaluates the potential impact of the plan:
+
+- defined in: `schemas/policies.py`
+- created by:
+- `mock_assess_risk()`
+- `live_assess_risk()`
+- deterministic machine risk logic
+
+```mermaid
+flowchart TD
+    P[ExecutionPlan] --> R[RiskAssessment]
+    R --> N[Advisory only / not authoritative]
+```
+
+Produces:
+
+- risk level (low, medium, high, critical)
+- reasons
+- sensitive capabilities
+
+### 4. PolicyDecision — Authoritative Control
+
+The single point of authority:
+
+- defined in: `schemas/policies.py`
+- created by: `policies/engine.py`
+
+```mermaid
+flowchart TD
+    T[TaskRequest] --> D[PolicyDecision]
+    P[ExecutionPlan] --> D
+    R[RiskAssessment] --> D
+    S[System State] --> D
+
+    D -.-> N[Deterministic<br/>Final authority]
+```
 
 Possible outcomes:
-	•	allow
-	•	require_approval
-	•	deny
 
-This is the authoritative control decision.
+- allow
+- require_approval
+- deny
 
-⸻
+### 5. Execution Layer — Controlled Actuation
 
-5. AuditEvent
+Only executed if policy allows it:
 
-Represents traceable workflow events.
-	•	defined in: src/agent_control_core/schemas/audit.py
-	•	emitted in: demo.py
-	•	logged by: audit/logger.py
+- implemented in: `execution/executor.py`
+- uses:
+- MachineExecutor
+- ExecutionBundle
 
-This layer provides auditability and traceability.
+```mermaid
+flowchart TD
+    D[PolicyDecision] -->|allow| X[Execution]
+    X --> M[Machine / Tool]
 
-Safety model
+    D -.-> N1[Deterministic decision]
+    X -.-> N2[Bounded execution<br/>No direct LLM control]
+```
 
-The architecture intentionally separates:
-	•	LLM reasoning
-	•	deterministic rule evaluation
-	•	final enforcement
+Important constraint:
 
-This prevents the model from being the sole authority.
+> Execution is never performed directly from plan or LLM output.
+
+### 6. Audit Layer — Full Traceability
+
+Every step is logged:
+
+- defined in: `schemas/audit.py`
+- logged via: `audit/logger.py`
+
+```mermaid
+flowchart TD
+    T --> L[Audit Log]
+    P --> L
+    R --> L
+    D --> L
+    X --> L
+```
+
+Provides:
+
+- traceability
+- reproducibility
+- compliance support
+
+---
+
+## Machine Control Extension
+
+The machine demo extends the architecture with state-aware control and hardware enforcement.
+
+```mermaid
+flowchart TD
+    U[Operator Input] --> T[TaskRequest]
+    T --> I[Intent Parser]
+
+    I -->|recognized| P[Deterministic Plan]
+    I -->|unrecognized| F[Fail Closed]
+
+    P --> R[Deterministic Risk]
+    R --> D[PolicyDecision]
+
+    D -->|allow| E[Execution Bundle]
+    E --> H[Hardware Layer]
+
+    H --> S[Machine State]
+    S --> D
+
+    F --> L[Audit Log]
+```
+
+Key additions:
+
+- deterministic intent parsing
+- bounded actuator control
+- hardware approval input
+- state-based constraints
+
+---
+
+## Safety Architecture
+
+The system enforces multiple independent safety layers:
+
+```mermaid
+flowchart LR
+    I[Intent] --> C1[Parser Validation]
+    C1 --> C2[Risk Assessment]
+    C2 --> C3[Policy Engine]
+    C3 --> C4[Execution Constraints]
+    C4 --> C5[Hardware Safeguards]
+```
+
+Each layer can independently block unsafe behavior.
+
+---
+
+## Fail-Closed Guarantee
+
+A core property of the architecture:
+
+If the system is uncertain, ambiguous, or detects unsafe intent → it does nothing.
+
+```mermaid
+flowchart TD
+    U[User Input] --> P{Recognized?}
+
+    P -->|No| F[Fail Closed]
+    P -->|Yes| R[Risk + Policy]
+
+    R -->|Unsafe| B[Blocked]
+    R -->|Safe| E[Execute]
+
+    F --> L[Audit]
+    B --> L
+```
+
+This ensures:
+
+- no implicit execution
+- no fallback to unsafe behavior
+- no reliance on LLM interpretation alone
+
+---
+
+## Separation of Concerns
+
+| **Layer** | **Responsibility** | **Trust Level** |
+| TaskRequest | raw input | untrusted |
+| ExecutionPlan | proposal | untrusted |
+|RiskAssessment | advisory | semi-trusted |
+|PolicyDecision | authority | trusted |
+|Execution | actuation | fully controlled |
+|Audit | traceability | immutable |
+
+---
+
+## Key Architectural Properties
+
+**Deterministic Control**
+
+> Policy decisions are rule-based and reproducible.
+
+**State Awareness**
+
+> Execution depends on real system or machine state.
+
+**Bounded Execution**
+
+> All actions are constrained before execution.
+
+**Human Oversight**
+
+> Approval is required for sensitive actions.
+
+**Auditability**
+
+> Every decision and action is logged.
+
+---
+
+## Summary
+
+Agent Control Core is not an agent framework.
+
+It is a **control system for agents**.
+
+It ensures that:
+
+- models propose
+- systems evaluate
+- policies decide
+- machines execute under constraint
+
+This separation is what makes safe agent-driven execution possible.

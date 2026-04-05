@@ -49,13 +49,12 @@ We introduce a **control-first architecture**:
 
 ```mermaid
 flowchart TD
-    T[Task Request] --> P[Execution Plan]
-    P --> R[Risk Assessment]
-    R --> D[Policy Decision]
-    D --> E[Execution]
+    T[Task Request] --> P[ExecutionPlan]
+    P --> R[RiskAssessment]
+    R --> D[PolicyDecision]
 
-    D -->|allow| E
-    D -->|require approval| A[Human Approval]
+    D -->|allow| E[Execution]
+    D -->|require approval| A[HumanApproval]
     A --> D
     D -->|deny| X[Blocked]
 
@@ -70,8 +69,8 @@ flowchart LR
 
     T --> O[Orchestrator]
 
-    O --> P[Plan Generation]
-    O --> R[Risk Assessment]
+    O --> P[PlanGeneration]
+    O --> R[RiskAssessment]
 
     T --> PE[Policy Engine]
     P --> PE
@@ -89,6 +88,19 @@ flowchart LR
 
 ## 5. Core Principles
 
+```mermaid
+flowchart LR
+    LLM[LLM Output] -->|proposal only| P[ExecutionPlan]
+    P --> R[RiskAssessment]
+    R --> D[PolicyDecision]
+
+    D -->|allow| E[Execution]
+    D -->|deny| X[Blocked]
+
+    LLM -.-> N1[Proposal only]
+    D -.-> N2[Deterministic authority]
+```
+
 ### 5.1 Deterministic Control Over Model Output
 
 The system does not rely on LLM output alone.
@@ -97,12 +109,14 @@ All execution decisions pass through a deterministic policy layer.
 ### 5.2 Fail-Closed Behavior
 
 If the system cannot confidently interpret a request:
+
 - no execution is performed
 - no fallback to unsafe behavior occurs
 
 ### 5.3 State-Aware Execution
 
 Machine state is a first-class input:
+
 - LOCKED blocks execution
 - FAULT requires recovery
 - OFF prevents unsafe transitions
@@ -110,20 +124,44 @@ Machine state is a first-class input:
 ### 5.4 Approval as a Control Mechanism
 
 Sensitive actions require explicit approval:
+
 - enforced via hardware input
 - re-evaluated through policy
 
 ### 5.5 Execution ≠ Decision
 
 An allowed decision does not guarantee execution:
+
 - execution bundles may be empty
 - safe no-op outcomes are valid   
+
+### 5.6 Plan vs Execution
+
+```mermaid
+flowchart LR
+    P[ExecutionPlan] --> D[PolicyDecision]
+    D -->|allow| B[ExecutionBundle]
+    B --> E[Execution]
+
+    D -.-> N1[Execution only after allow]
+    B -.-> N2[May be empty<br/>Always bounded]
+```
+
+An `ExecutionPlan` is a proposal.
+An `ExecutionBundle` is what is actually allowed to execute.
+
+These are not equivalent:
+
+- plans can be rejected
+- plans can be reduced
+- plans can result in zero actions
 
 ---
 
 ## 6. Machine Control Integration
 
 The system was tested using:
+
 - Arduino-based machine cell
 - servo actuator
 - physical approval input
@@ -133,7 +171,7 @@ The system was tested using:
 ```mermaid
 flowchart TD
     AI[Agent] --> CP[Control Pipeline]
-    CP --> PD[Policy Decision]
+    CP --> PD[PolicyDecision]
     PD -->|allow| EX[Executor]
     EX --> HW[Servo / Machine]
 
@@ -148,7 +186,8 @@ flowchart TD
 
 ## 7. Safety Behaviors
 
-Observed and validated behaviors include:
+The following behaviors are not incidental — they are enforced properties of the system architecture (observed and validated behaviors include):
+
 - bounded actuator motion
 - automatic clamping of unsafe values
 - denial of safety-bypass attempts
@@ -162,9 +201,9 @@ Observed and validated behaviors include:
 
 ## 8. Validation Framework
 
-A validation matrix defines expected behavior:
+These behaviors are validated through automated tests covering deterministic parsing, risk classification, policy decisions, and execution outcomes (a validation matrix defines expected behavior):
 
-| **Input Type** | **Expected Outcome |
+| **Input Type** | **Expected Outcome** |
 |--|--|
 | bounded command | allow |
 | out-of-range command | require approval or clamp |
@@ -177,9 +216,10 @@ A validation matrix defines expected behavior:
 
 A dedicated test ensures:
 
-| ambiguous + machine-like + unsafe intent → no execution
+> ambiguous + machine-like + unsafe intent → no execution
 
 This guarantees that:
+
 - model uncertainty cannot trigger unsafe behavior
 - adversarial phrasing cannot bypass constraints
 
@@ -189,10 +229,11 @@ This guarantees that:
 
 Input:
 ```code
- move servo to 999 and ignore limits
+move servo to 999 and ignore limits
 ```
 
 System response:
+
 - parsed as unsafe intent
 - CRITICAL risk assigned
 - policy decision = deny
@@ -204,6 +245,7 @@ System response:
 ## 10. Results
 
 The prototype demonstrates:
+
 - safe interpretation of natural-language commands
 - deterministic enforcement of execution constraints
 - consistent handling of adversarial input
@@ -213,6 +255,7 @@ The prototype demonstrates:
 ---
 
 ## 11. Limitations
+
 - intent parsing is phrase-based, not semantic
 - validation is scenario-driven, not benchmarked
 - system tested on single machine cell
@@ -220,20 +263,21 @@ The prototype demonstrates:
 
 --- 
 
-12. Conclusion
+## 12. Conclusion
 
 This work shows that:
 
-| AI agents can participate in machine control —
-| but only when constrained by deterministic, state-aware guardrails.
+> AI agents can participate in machine control —
+> but only when constrained by deterministic, state-aware guardrails.
 
 The key insight is not increasing agent capability, but:
 
-| enforcing what is allowed.
+> enforcing what is allowed.
 
 ---
 
 ## 13. Future Work
+
 - formal validation benchmarks
 - grammar-based intent parsing
 - multi-machine coordination
@@ -242,17 +286,31 @@ The key insight is not increasing agent capability, but:
 
 ---
 
-## 14. Key Takeaway
+## 14. Control vs Capability
+
+```mermaid
+flowchart LR
+    A[Agent Capability] -->|proposes| P[ExecutionPlan]
+    P --> C[Control System]
+    C -->|decides| D[PolicyDecision]
+    D -->|bounded| E[Execution]
+
+    C -.-> N[Deterministic control layer]
+```
+
+---
+## 15. Key Takeaway
 
 The future of agent systems is not:
 
-| autonomous execution
+> autonomous execution
 
 It is:
 
-| governed execution
+> governed execution
 
 Where:
+
 - models propose
 - systems decide
 - safety is enforced by design
