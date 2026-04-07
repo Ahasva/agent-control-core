@@ -46,6 +46,7 @@ This project focuses on **safety, governance, and human oversight** in agentic A
 - [Failure & Safety Testing Guide](#failure--safety-testing-guide)
 - [Current Safety Behaviors](#current-safety-behaviors)
 - [What the Prototype Already Proves](#what-the-prototype-already-proves)
+- [Quick Start](#quick-start)
 
 ---
 
@@ -785,3 +786,17 @@ It demonstrates that:
 - physical actuation remains auditable and controlled
 
 These behaviors are not only demonstrated manually but are also enforced through automated validation tests, ensuring consistent and reproducible safety guarantees.
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/Ahasva/agent-control-core
+cd agent-control-core
+
+python -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```

@@ -10,7 +10,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.2",
-    "pyyaml>=6.0"
+    "pyyaml>=6.0",
+    "pyserial"
 ]
 
 [tool.setuptools]
